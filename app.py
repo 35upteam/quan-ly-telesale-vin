@@ -33,7 +33,10 @@ if not st.session_state['logged_in']:
     p = st.text_input("Mật khẩu", type="password")
     if st.button("Đăng nhập"):
         sh_user = doc.worksheet("QUAN_LY_USER")
-        u_df = pd.DataFrame(sh_user.get_all_records())
+        # Cách đọc dữ liệu an toàn để tránh lỗi trùng tiêu đề
+        data_user = sh_user.get_all_values()
+        u_df = pd.DataFrame(data_user[1:], columns=data_user[0])
+        
         auth = u_df[(u_df['Username'] == u) & (u_df['Password'].astype(str) == p)]
         if not auth.empty:
             st.session_state['logged_in'] = True
@@ -52,11 +55,21 @@ else:
     
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
-        data = sh_data.get_all_records()
-        if not data:
-            st.warning("Tab DATA_CAN_HO đang trống dữ liệu!")
+        
+        # SỬA LỖI TRÙNG TIÊU ĐỀ TẠI ĐÂY:
+        # Thay vì get_all_records, ta dùng get_all_values để tự xử lý DataFrame
+        raw_data = sh_data.get_all_values()
+        if len(raw_data) < 2:
+            st.warning("Tab DATA_CAN_HO chưa có dữ liệu!")
             st.stop()
-        df = pd.DataFrame(data)
+            
+        # Lấy hàng đầu tiên làm tiêu đề, các hàng sau là dữ liệu
+        header = raw_data[0]
+        rows = raw_data[1:]
+        
+        # Tạo DataFrame và loại bỏ các cột không có tên (tránh lỗi duplicate '')
+        df = pd.DataFrame(rows, columns=header)
+        df = df.loc[:, df.columns != ''] # Xóa các cột trắng
         
         # Lọc đơn giản
         dstoa = ["Tất cả"] + sorted(list(df['Tòa'].unique()))
@@ -77,7 +90,6 @@ else:
                         now = datetime.now().strftime("%H:%M %d/%m")
                         sh_log.append_row([now, st.session_state['user_name'], r['Mã đầy đủ']])
                         st.toast("Đã lưu lịch sử!")
-    except gspread.exceptions.WorksheetNotFound:
-        st.error("Không tìm thấy tab 'DATA_CAN_HO'. Hãy kiểm tra lại tên tab trong Google Sheets!")
+                        
     except Exception as e:
         st.error(f"Lỗi đọc dữ liệu: {e}")
