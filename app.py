@@ -10,9 +10,21 @@ st.markdown("""
     <style>
     .stButton button { width: 100%; border-radius: 4px; height: 32px; font-size: 13px; }
     .header-text { font-weight: bold; color: #1f2d3d; border-bottom: 2px solid #dee2e6; padding-bottom: 5px; font-size: 14px; }
-    div[data-testid="stTextInput"] input { height: 32px; font-size: 13px; }
+    div[data-testid="stTextInput"] input { height: 38px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #f0f2f6; padding: 10px 0; }
     code { font-size: 14px !important; color: #007bff !important; background-color: #f8f9fa; border: 1px solid #ddd; }
+    
+    /* CSS cho khu vực User ở góc phải */
+    .user-box {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 15px;
+        padding: 10px;
+        background-color: #f0f2f6;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -40,70 +52,74 @@ if 'res_df' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# --- 2. ĐĂNG NHẬP ---
-if st.session_state['logged_in'] is False:
+# --- 2. LOGIC ĐĂNG NHẬP ---
+if not st.session_state['logged_in']:
     st.title("🔐 Đăng nhập hệ thống")
-    u_val = st.text_input("Tài khoản").strip()
-    p_val = st.text_input("Mật khẩu", type="password").strip()
-    if st.button("Đăng nhập"):
-        try:
-            sh_u = doc.worksheet("QUAN_LY_USER")
-            users_df = pd.DataFrame(sh_u.get_all_records())
-            auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-            if not auth.empty:
-                st.session_state['logged_in'] = True
-                st.session_state['user_name'] = u_val
-                st.rerun()
-            else:
-                st.error("Tài khoản hoặc mật khẩu không đúng!")
-        except Exception as e:
-            st.error(f"Lỗi: {e}")
+    col_l, col_r = st.columns([1, 2])
+    with col_l:
+        u_val = st.text_input("Tài khoản").strip()
+        p_val = st.text_input("Mật khẩu", type="password").strip()
+        if st.button("Đăng nhập"):
+            try:
+                sh_u = doc.worksheet("QUAN_LY_USER")
+                users_df = pd.DataFrame(sh_u.get_all_records())
+                auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+                if not auth.empty:
+                    st.session_state['logged_in'] = True
+                    st.session_state['user_name'] = u_val
+                    st.rerun()
+                else:
+                    st.error("Tài khoản hoặc mật khẩu không đúng!")
+            except Exception as e:
+                st.error(f"Lỗi: {e}")
 else:
-    # --- 3. BỘ LỌC DỮ LIỆU ---
-    st.sidebar.write(f"👤 Chào: **{st.session_state['user_name']}**")
-    if st.sidebar.button("Đăng xuất"):
-        st.session_state.clear()
-        st.rerun()
+    # --- 3. THANH NGANG USER (GÓC PHẢI) ---
+    u_col1, u_col2 = st.columns([8, 2])
+    with u_col2:
+        st.markdown(f"👤 Chào: **{st.session_state['user_name']}**")
+        if st.button("Đăng xuất", key="logout_btn"):
+            st.session_state.clear()
+            st.rerun()
 
+    # --- 4. TẢI DỮ LIỆU ---
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
         raw_vals = sh_data.get_all_values()
         h_names = raw_vals[0]
         df_main = pd.DataFrame(raw_vals[1:], columns=h_names)
         
-        # Chuẩn hóa dữ liệu
+        # Chuẩn hóa
         df_main = df_main.applymap(lambda x: str(x).strip() if x is not None else "")
         df_main['Tòa_Clean'] = df_main['Tòa'].apply(lambda x: x.replace(".", ""))
         df_main['Trục_Clean'] = df_main['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
 
-        # THÊM BỘ LỌC MÃ CĂN CỤ THỂ
-        col_m1, col_m2 = st.columns([2, 1])
-        with col_m1:
-            search_ma = st.text_input("🔍 Nhập Mã căn đầy đủ (Ví dụ: S1010506)", placeholder="Tìm nhanh theo mã...")
-        with col_m2:
-            st.write("##") # Tạo khoảng trống
-            btn_search = st.button("Tìm kiếm nhanh")
+        # --- 5. CHIA TABS BỘ LỌC ---
+        tab_code, tab_filter = st.tabs(["🔍 Tìm theo Mã Căn", "📊 Lọc theo Tiêu chí"])
 
-        st.divider()
-
-        # BỘ LỌC CHI TIẾT
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
-        with c1: 
-            toas_raw = sorted([t for t in df_main['Tòa'].unique() if t])
-            sel_t = st.multiselect("Chọn Tòa", toas_raw)
-        with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
-        with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
-        with c4: sel_tr = st.multiselect("Chọn Trục", LIST_TRUC)
-
-        # LOGIC LỌC
-        if btn_search or st.button("🚀 Thực hiện lọc theo tiêu chí"):
-            t_df = df_main.copy()
+        with tab_code:
+            c_m1, c_m2 = st.columns([3, 1])
+            with c_m1:
+                search_ma = st.text_input("Nhập mã căn đầy đủ (Ví dụ: S1010506)", key="search_ma_input")
+            with c_m2:
+                st.write("##")
+                btn_ma = st.button("Tìm kiếm mã này", use_container_width=True)
             
-            # Ưu tiên lọc theo mã căn nếu có nhập
-            if search_ma:
-                t_df = t_df[t_df['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
-            else:
-                # Lọc theo tiêu chí chi tiết
+            if btn_ma:
+                st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
+
+        with tab_filter:
+            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+            with c1: 
+                toas_raw = sorted([t for t in df_main['Tòa'].unique() if t])
+                sel_t = st.multiselect("Chọn Tòa", toas_raw)
+            with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
+            with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
+            with c4: sel_tr = st.multiselect("Chọn Trục", LIST_TRUC)
+            
+            btn_filter = st.button("🚀 Thực hiện lọc theo tiêu chí", use_container_width=True)
+            
+            if btn_filter:
+                t_df = df_main.copy()
                 if len(sel_t) > 0:
                     sel_t_clean = [x.replace(".", "") for x in sel_t]
                     t_df = t_df[t_df['Tòa_Clean'].isin(sel_t_clean)]
@@ -113,18 +129,20 @@ else:
                 idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
                 allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
                 t_df = t_df[t_df['Tầng'].isin(allowed)]
-            
-            st.session_state['res_df'] = t_df
+                st.session_state['res_df'] = t_df
 
-        # --- 4. HIỂN THỊ DANH SÁCH ---
+        # --- 6. HIỂN THỊ KẾT QUẢ ---
         res_display = st.session_state['res_df']
         
         if not res_display.empty:
-            st.success(f"Tìm thấy {len(res_display)} kết quả.")
+            st.divider()
+            st.info(f"Đang hiển thị {len(res_display)} kết quả.")
+            
+            # Header
             h_cols = st.columns([1.2, 1.2, 0.6, 1.5, 2.5, 0.6])
-            titles = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 📞)", "Ghi chú nội bộ", "Lưu"]
-            for ui, txt in zip(h_cols, titles):
-                ui.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
+            labels = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 📞)", "Ghi chú", "Lưu"]
+            for ui, lb in zip(h_cols, labels):
+                ui.markdown(f"<div class='header-text'>{lb}</div>", unsafe_allow_html=True)
 
             for i, r in res_display.iterrows():
                 row = st.columns([1.2, 1.2, 0.6, 1.5, 2.5, 0.6])
@@ -132,13 +150,12 @@ else:
                 row[1].write(r['Chủ nhà'])
                 row[2].write(f"{r['Diện tích']}m²")
                 
-                # SĐT & Icon ĐIỆN THOẠI 📞 đơn giản hơn icon mắt
+                # SĐT & Icon 📞
                 s_key = f"v_{r['Mã đầy đủ']}"
                 if s_key in st.session_state and st.session_state[s_key]:
                     row[3].code(r['Số điện thoại'], language="text")
                 else:
-                    # Rút gọn số điện thoại để giao diện gọn hơn
-                    pre = r['Số điện thoại'][:4] + "..." if len(r['Số điện thoại']) > 4 else "Xem số"
+                    pre = r['Số điện thoại'][:4] + "..." if len(r['Số điện thoại']) > 4 else "Xem"
                     if row[3].button(f"📞 {pre}", key=f"btn_{i}"):
                         st.session_state[s_key] = True
                         st.rerun()
@@ -149,12 +166,12 @@ else:
                         cell = sh_data.find(r['Mã đầy đủ'])
                         g_col = h_names.index('Ghi chú') + 1
                         sh_data.update_cell(cell.row, g_col, note_val)
-                        st.toast("Đã lưu!", icon="✅")
+                        st.toast(f"Đã lưu căn {r['Mã đầy đủ']}!", icon="✅")
                     except: st.error("Lỗi lưu")
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         else:
             if 'res_df' in st.session_state:
-                st.info("Nhập thông tin và bấm tìm kiếm.")
+                st.write("Hãy chọn bộ lọc hoặc nhập mã căn để xem dữ liệu.")
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
