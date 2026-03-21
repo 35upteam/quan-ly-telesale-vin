@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import time # Thêm để tạo khoảng nghỉ khi thử lại
 from oauth2client.service_account import ServiceAccountCredentials
 
 # --- 1. CẤU HÌNH ---
@@ -11,7 +12,6 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
     
-    /* Ép toàn bộ cụm Header sang sát bên phải màn hình */
     .header-right-container {
         display: flex;
         justify-content: flex-end;
@@ -22,13 +22,8 @@ st.markdown("""
         width: 100%;
     }
     
-    .user-greet {
-        font-size: 15px;
-        color: #333;
-        white-space: nowrap;
-    }
+    .user-greet { font-size: 15px; color: #333; white-space: nowrap; }
 
-    /* Định dạng nút đăng xuất icon X đỏ */
     .stButton > button[key="logout_btn"] {
         background-color: #ff4b4b !important;
         color: white !important;
@@ -48,8 +43,6 @@ st.markdown("""
     div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
-    
-    /* Thông báo lỗi đỏ dưới ô nhập */
     .error-msg { color: #ff4b4b; font-size: 13px; margin-top: 5px; font-weight: bold; }
     
     .brand-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 800; color: #1a1a1a; margin-bottom: 5px; text-align: center; }
@@ -78,7 +71,7 @@ if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'search_error' not in st.session_state: st.session_state['search_error'] = ""
 
-# --- 2. ĐĂNG NHẬP ---
+# --- 2. ĐĂNG NHẬP (ĐÃ THÊM RETRY) ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.2, 1])
     with mid_col:
@@ -87,18 +80,34 @@ if not st.session_state['logged_in']:
         st.markdown("<div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>", unsafe_allow_html=True)
         u_val = st.text_input("Tài khoản").strip()
         p_val = st.text_input("Mật khẩu", type="password").strip()
+        
         if st.button("Đăng nhập"):
-            try:
-                sh_u = doc.worksheet("QUAN_LY_USER")
-                data = sh_u.get_all_values()
-                users_df = pd.DataFrame(data[1:], columns=data[0])
-                auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-                if not auth.empty:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
-                    st.rerun()
-                else: st.error("Tài khoản hoặc mật khẩu không đúng!")
-            except: st.error("Lỗi kết nối dữ liệu người dùng.")
+            success = False
+            for attempt in range(3): # Thử tối đa 3 lần
+                try:
+                    sh_u = doc.worksheet("QUAN_LY_USER")
+                    data = sh_u.get_all_values()
+                    users_df = pd.DataFrame(data[1:], columns=data[0])
+                    auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+                    
+                    if not auth.empty:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
+                        success = True
+                        break # Thoát vòng lặp khi thành công
+                    else:
+                        st.error("Tài khoản hoặc mật khẩu không đúng!")
+                        success = True # Để không báo lỗi kết nối bên dưới
+                        break
+                except Exception as e:
+                    if attempt < 2: # Nếu chưa tới lần cuối, nghỉ 1s rồi thử lại
+                        time.sleep(1)
+                        continue
+                    else:
+                        st.error(f"Lỗi kết nối dữ liệu người dùng (Đã thử 3 lần). Vui lòng kiểm tra internet.")
+            
+            if success: st.rerun()
+
 else:
     # --- 3. HEADER (SÁT PHẢI TUYỆT ĐỐI) ---
     st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
@@ -130,6 +139,7 @@ else:
                     st.markdown(f"<div class='error-msg'>⚠️ {st.session_state['search_error']}</div>", unsafe_allow_html=True)
             
             with c_btn:
+                # Tìm kiếm khi bấm nút hoặc nhấn Enter
                 if st.button("Tìm kiếm", key="btn_find_ma") or (search_ma and st.session_state.get('last_trigger') != search_ma):
                     st.session_state['last_trigger'] = search_ma
                     if search_ma:
@@ -201,4 +211,4 @@ else:
                 st.markdown('</div>', unsafe_allow_html=True)
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
 
-    except Exception as e: st.error(f"Lỗi: {e}")
+    except Exception as e: st.error(f"Lỗi hệ thống: {e}")
