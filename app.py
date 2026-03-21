@@ -1,115 +1,159 @@
 import streamlit as st
 import pandas as pd
-import re
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-# --- 1. CẤU HÌNH TRANG (PHẢI ĐỂ ĐẦU TIÊN) ---
-st.set_page_config(page_title="PhanMemNhaDat - Smart City", layout="wide")
+# --- CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Hệ thống Telesale Vin", layout="wide")
 
-# --- 2. KIỂM TRA ĐĂNG NHẬP ---
+# CSS để làm đẹp bảng và nút bấm
+st.markdown("""
+    <style>
+    .stButton button { width: 100%; border-radius: 5px; height: 2em; }
+    .main-table { font-size: 14px; }
+    div[data-testid="stExpander"] { border: none !important; box-shadow: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+@st.cache_resource
+def init_connection():
+    try:
+        creds_info = dict(st.secrets["gcp_service_account"])
+        if "private_key" in creds_info:
+            creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n").strip()
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        client = gspread.authorize(creds)
+        return client.open("Data Vin")
+    except Exception as e:
+        st.error(f"Lỗi hệ thống: {e}")
+        st.stop()
+
+doc = init_connection()
+
+# Quản lý trạng thái hiển thị SĐT
+if 'show_phone' not in st.session_state:
+    st.session_state['show_phone'] = {}
+if 'search_results' not in st.session_state:
+    st.session_state['search_results'] = pd.DataFrame()
+if 'view_mode' not in st.session_state:
+    st.session_state['view_mode'] = None
+
+# --- ĐĂNG NHẬP ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-def check_login():
-    st.title("🔐 Đăng nhập hệ thống")
-    user = st.text_input("Tài khoản (admin)")
-    pwd = st.text_input("Mật khẩu (123)", type="password")
-    
-    if st.button("Đăng nhập", type="primary"):
-        if user == "admin" and pwd == "123":
-            st.session_state['logged_in'] = True
-            st.rerun() # Lệnh này cực kỳ quan trọng để làm mới trang
-        else:
-            st.error("Sai tài khoản hoặc mật khẩu")
-
-# Nếu chưa đăng nhập thì dừng tại đây và hiện form login
 if not st.session_state['logged_in']:
-    check_login()
-    st.stop() 
-
-# --- 3. NỘI DUNG CHÍNH (CHỈ CHẠY KHI ĐÃ ĐĂNG NHẬP) ---
-
-# --- DANH SÁCH DỮ LIỆU CHUẨN ---
-LIST_TOA = [
-    "S1.01", "S1.02", "S1.03", "S1.05", "S1.06", "S2.01", "S2.02", "S2.03", "S2.05", 
-    "S3.01", "S3.02", "S3.03", "S4.01", "S4.02", "S4.03", "GS1", "GS2", "GS3", "GS5", "GS6", 
-    "SA1", "SA2", "SA3", "SA5", "V1", "V2", "V3", "TK1", "TK2", "TC1", "TC2", "TC3", 
-    "West A", "West B", "West C", "West D", "The Aura (A3)", "The Atmos (A2)", "The Aqua (A1)", 
-    "I1", "I2", "I3", "I4", "I5", "G1", "G2", "G3", "G5", "G6"
-]
-
-LIST_TANG_LABEL = [
-    "1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", 
-    "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", 
-    "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"
-]
-
-def get_numeric_floor(label):
-    mapping = {"05A": 4, "12A": 13, "15A": 14, "12B": 14, "08A": 8.5, "25A": 24}
-    if label in mapping: return mapping[label]
-    try:
-        num_part = re.sub("[^0-9]", "", str(label))
-        return int(num_part)
-    except: return 0
-
-# --- DATA --- (Thay phần này bằng kết nối Google Sheets của bạn)
-@st.cache_data
-def load_data():
-    data = {
-        'MaCan': ['S3.03-0305A', 'S3.03-1015A', 'S3.03-2515', 'GS1-0508', 'TK1-2010'],
-        'Toa': ['S3.03', 'S3.03', 'S3.03', 'GS1', 'TK1'],
-        'Tang': ['05A', '10', '25', '05', '20'],
-        'Truc': ['05A', '15A', '15', '08', '10'],
-        'Gia': [2800, 3200, 3100, 2700, 5200],
-        'DienTich': [43, 54, 55, 43, 70]
-    }
-    return pd.DataFrame(data)
-
-df = load_data()
-
-# --- GIAO DIỆN ---
-st.title("🏙️ Quản lý & Lọc Căn Hộ Vinhomes Smart City")
-
-# Nút Đăng xuất cho chuyên nghiệp
-if st.sidebar.button("Đăng xuất"):
-    st.session_state['logged_in'] = False
-    st.rerun()
-
-tab1, tab2 = st.tabs(["🔍 Tìm theo Mã căn", "📂 Lọc nâng cao"])
-
-with tab1:
-    search_ma = st.text_input("Nhập mã căn cụ thể", placeholder="Ví dụ: S3.03-0305A")
-    if search_ma:
-        res_ma = df[df['MaCan'].str.contains(search_ma, case=False)]
-        st.dataframe(res_ma, use_container_width=True)
-
-with tab2:
-    with st.expander("Mở bộ lọc chi tiết", expanded=True):
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 2])
-        with c1:
-            toa_sel = st.selectbox("🏢 Chọn Tòa", options=["Tất cả"] + LIST_TOA)
-        with c2:
-            t_tu = st.selectbox("🔽 Tầng từ", options=LIST_TANG_LABEL, index=0)
-        with c3:
-            t_den = st.selectbox("🔼 Đến tầng", options=LIST_TANG_LABEL, index=len(LIST_TANG_LABEL)-1)
-        with c4:
-            truc_options = sorted(df['Truc'].unique().tolist())
-            truc_sel = st.multiselect("🎯 Chọn Trục (Căn số)", options=truc_options)
-
-    if st.button("🚀 Bắt đầu lọc", type="primary"):
-        df['Tang_Num'] = df['Tang'].apply(get_numeric_floor)
-        val_tu = get_numeric_floor(t_tu)
-        val_den = get_numeric_floor(t_den)
-        
-        mask = (df['Tang_Num'] >= val_tu) & (df['Tang_Num'] <= val_den)
-        if toa_sel != "Tất cả":
-            mask &= (df['Toa'] == toa_sel)
-        if truc_sel:
-            mask &= (df['Truc'].isin(truc_sel))
-            
-        df_res = df[mask].drop(columns=['Tang_Num'])
-        
-        if not df_res.empty:
-            st.success(f"Tìm thấy {len(df_res)} kết quả!")
-            st.dataframe(df_res, use_container_width=True)
+    st.title("🔐 Đăng nhập")
+    u = st.text_input("Tên đăng nhập")
+    p = st.text_input("Mật khẩu", type="password")
+    if st.button("Đăng nhập"):
+        sh_user = doc.worksheet("QUAN_LY_USER")
+        data_u = sh_user.get_all_values()
+        u_df = pd.DataFrame(data_u[1:], columns=data_u[0])
+        auth = u_df[(u_df['Username'] == u) & (u_df['Password'].astype(str) == p)]
+        if not auth.empty:
+            st.session_state['logged_in'] = True
+            st.session_state['user_name'] = u
+            st.rerun()
         else:
-            st.warning("Không tìm thấy kết quả nào khớp với dữ liệu hiện tại.")
+            st.error("Sai thông tin!")
+else:
+    st.sidebar.subheader(f"👤 {st.session_state['user_name']}")
+    if st.sidebar.button("Đăng xuất"):
+        st.session_state.clear()
+        st.rerun()
+
+    st.title("🏘️ Tra cứu Căn hộ")
+
+    try:
+        sh_data = doc.worksheet("DATA_CAN_HO")
+        raw_data = sh_data.get_all_values()
+        df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
+        df['Tầng'] = pd.to_numeric(df['Tầng'], errors='coerce').fillna(0)
+
+        # BỘ LỌC
+        tab1, tab2 = st.tabs(["🔍 Tìm theo Mã căn", "📂 Lọc nâng cao"])
+        
+        with tab1:
+            m_input = st.text_input("Nhập mã căn cụ thể").strip()
+            if st.button("🔍 Tìm kiếm"):
+                st.session_state['search_results'] = df[df['Mã đầy đủ'].str.contains(m_input, case=False, na=False)]
+                st.session_state['view_mode'] = 'single'
+
+        with tab2:
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                t_list = ["Tất cả"] + sorted(list(df['Tòa'].unique()))
+                s_toa = st.selectbox("Chọn Tòa", t_list)
+            with c2:
+                f_f = st.number_input("Tầng từ", value=1, step=1)
+            with c3:
+                f_t = st.number_input("Đến tầng", value=50, step=1)
+            with c4:
+                tr_list = sorted(list(df['Trục'].unique()))
+                s_truc = st.multiselect("Chọn Trục", tr_list)
+            
+            if st.button("🚀 Bắt đầu lọc"):
+                t_df = df.copy()
+                if s_toa != "Tất cả": t_df = t_df[t_df['Tòa'] == s_toa]
+                if s_truc: t_df = t_df[t_df['Trục'].isin(s_truc)]
+                t_df = t_df[t_df['Tầng'].between(f_f, f_t)]
+                st.session_state['search_results'] = t_df
+                st.session_state['view_mode'] = 'table'
+
+        # HIỂN THỊ
+        st.divider()
+        res = st.session_state['search_results']
+
+        if not res.empty:
+            if st.session_state['view_mode'] == 'single':
+                # Giao diện cho 1 mã căn (giữ nguyên hoặc tùy biến thêm)
+                for i, r in res.iterrows():
+                    with st.container(border=True):
+                        st.subheader(f"🏠 {r['Mã đầy đủ']}")
+                        st.write(f"Chủ nhà: {r['Chủ nhà']} | Loại: {r['Loại hình']} | Diện tích: {r['Diện tích']}m2")
+                        st.write(f"Trạng thái: **{r['Trạng thái']}**")
+                        # Nút hiện số
+                        if st.button(f"👁️ Hiện SĐT {r['Mã đầy đủ']}", key=f"s_{r['Mã đầy đủ']}"):
+                            st.code(r['Số điện thoại'], language="text") # Hiện dạng code để dễ copy
+
+            else:
+                # GIAO DIỆN BẢNG NGANG (LOẠI BỎ TÒA, TẦNG, TRỤC)
+                # Tiêu đề bảng
+                h = st.columns([1.5, 1.5, 1.5, 1, 1, 1.2])
+                cols_name = ["Mã Căn", "Chủ Nhà", "SĐT", "Loại", "D.Tích", "Trạng Thái"]
+                for col, name in zip(h, cols_name):
+                    col.markdown(f"**{name}**")
+                
+                for i, r in res.iterrows():
+                    c = st.columns([1.5, 1.5, 1.5, 1, 1, 1.2])
+                    c[0].write(r['Mã đầy đủ'])
+                    c[1].write(r['Chủ nhà'])
+                    
+                    # Cột SĐT với Icon Mắt và Copy
+                    sdt_key = f"show_{r['Mã đầy đủ']}"
+                    if sdt_key in st.session_state and st.session_state[sdt_key]:
+                        # Hiện số và nút copy
+                        c[2].code(r['Số điện thoại'], language="text")
+                    else:
+                        # Hiện nút Mắt để mở
+                        if c[2].button(f"👁️ {str(r['Số điện thoại'])[:4]}...", key=f"eye_{r['Mã đầy đủ']}"):
+                            st.session_state[sdt_key] = True
+                            # Ghi log
+                            doc.worksheet("LOG_TRUY_CAP").append_row([datetime.now().strftime("%H:%M %d/%m"), st.session_state['user_name'], r['Mã đầy đủ']])
+                            st.rerun()
+                    
+                    c[3].write(r['Loại hình'])
+                    c[4].write(f"{r['Diện tích']}m2")
+                    # Định dạng màu sắc cho trạng thái
+                    tt = r['Trạng thái']
+                    color = "green" if "Trống" in tt else "red" if "Đã bán" in tt else "orange"
+                    c[5].markdown(f":{color}[{tt}]")
+        
+        elif st.session_state['view_mode'] is not None:
+            st.warning("Không tìm thấy kết quả.")
+
+    except Exception as e:
+        st.error(f"Lỗi: {e}")
