@@ -6,26 +6,24 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- 1. CẤU HÌNH ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
-# CSS Tùy chỉnh để bố cục ngay ngắn
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
-    
-    /* Tùy chỉnh nút bấm và ô nhập */
-    .stButton button { width: 100%; border-radius: 6px; height: 40px; }
+    .stButton button { width: 100%; border-radius: 6px; height: 38px; }
     div[data-testid="stTextInput"] input { height: 40px; }
     
     /* Header chào nhân viên và đăng xuất */
-    .user-section {
+    .user-container {
         display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        margin-bottom: 10px;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 15px;
     }
     
-    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 15px; }
+    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
-    code { font-size: 15px !important; color: #1e88e5 !important; background-color: #f1f3f4 !important; border: 1px solid #dee2e6 !important; }
+    code { font-size: 14px !important; color: #1e88e5 !important; background-color: #f1f3f4 !important; border: 1px solid #dee2e6 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -74,13 +72,16 @@ if not st.session_state['logged_in']:
             except:
                 st.error("Lỗi kết nối dữ liệu người dùng.")
 else:
-    # --- 3. HEADER (CHÀO & ĐĂNG XUẤT) ---
-    h_c1, h_c2 = st.columns([8.5, 1.5])
-    with h_c2:
-        st.markdown(f"<div style='text-align: right; font-size: 14px;'>Chào: <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
-        if st.button("🚪 Đăng xuất", key="logout_btn"):
-            st.session_state.clear()
-            st.rerun()
+    # --- 3. HEADER (CHÀO & ĐĂNG XUẤT THẲNG HÀNG) ---
+    h_left, h_right = st.columns([7.5, 2.5])
+    with h_right:
+        c_user, c_logout = st.columns([1.5, 1])
+        with c_user:
+            st.markdown(f"<div style='padding-top: 8px; text-align: right;'>👤 {st.session_state['user_name']}!</div>", unsafe_allow_html=True)
+        with c_logout:
+            if st.button("🚪 Thoát", key="logout_btn"):
+                st.session_state.clear()
+                st.rerun()
 
     # --- 4. TẢI DỮ LIỆU ---
     try:
@@ -93,22 +94,19 @@ else:
         df_main['Tòa_Clean'] = df_main['Tòa'].apply(lambda x: x.replace(".", ""))
         df_main['Trục_Clean'] = df_main['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
 
-        # --- 5. BỘ LỌC CHI THEO TABS ---
-        tab_ma, tab_tieuchi = st.tabs(["🔍 Tìm theo Mã Căn", "📊 Lọc theo Tầng & Trục"])
+        # --- 5. BỘ LỌC TABS ---
+        tab_ma, tab_tieuchi = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
 
         with tab_ma:
-            # Bố cục ô nhập và nút tìm kiếm thẳng hàng, thu gọn
             c_in, c_btn, _ = st.columns([2, 0.8, 3])
             with c_in:
-                search_ma = st.text_input("Mã đầy đủ (Ví dụ: S1010506)", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn...")
+                search_ma = st.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn...")
             with c_btn:
-                btn_find_ma = st.button("🔎 Tìm kiếm", key="btn_find_ma")
-            
-            if btn_find_ma:
-                if search_ma:
-                    st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
-                else:
-                    st.warning("Vui lòng nhập mã căn.")
+                if st.button("Tìm kiếm", key="btn_find_ma"):
+                    if search_ma:
+                        st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
+                    else:
+                        st.warning("Nhập mã căn!")
 
         with tab_tieuchi:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
@@ -119,7 +117,7 @@ else:
             with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
             with c4: sel_tr = st.multiselect("Chọn Trục", LIST_TRUC)
             
-            if st.button("🚀 Thực hiện lọc theo tiêu chí", key="btn_filter"):
+            if st.button("🚀 Thực hiện lọc", key="btn_filter"):
                 t_df = df_main.copy()
                 if len(sel_t) > 0:
                     sel_t_cl = [x.replace(".", "") for x in sel_t]
@@ -137,46 +135,46 @@ else:
         
         if not res_display.empty:
             st.divider()
-            st.success(f"Tìm thấy {len(res_display)} căn hộ phù hợp.")
+            st.success(f"Tìm thấy {len(res_display)} căn hộ.")
             
-            # Header bảng
-            cols_ui = st.columns([1.2, 1.2, 0.6, 1.5, 2.5, 0.6])
-            # FIX: Thay đổi tiêu đề SĐT
-            titles = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm để xem)", "Ghi chú", "Lưu"]
+            # Header bảng (Đã thêm cột Loại hình)
+            cols_ui = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
+            titles = ["Mã Căn", "Chủ Nhà", "Loại hình", "DT", "SĐT (Bấm xem)", "Ghi chú", "Lưu"]
             for ui, txt in zip(cols_ui, titles):
                 ui.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
 
             for i, r in res_display.iterrows():
-                row = st.columns([1.2, 1.2, 0.6, 1.5, 2.5, 0.6])
+                row = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
                 row[0].write(f"**{r['Mã đầy đủ']}**")
                 row[1].write(r['Chủ nhà'])
-                row[2].write(f"{r['Diện tích']}m²")
+                row[2].write(r.get('Loại hình', '-')) # FIX: Thêm cột Loại hình
+                row[3].write(f"{r['Diện tích']}m²")
                 
-                # SĐT (Ẩn 3 số cuối)
+                # SĐT
                 s_key = f"v_{r['Mã đầy đủ']}"
                 if s_key in st.session_state and st.session_state[s_key]:
-                    row[3].code(r['Số điện thoại'], language="text")
+                    row[4].code(r['Số điện thoại'], language="text")
                 else:
-                    sdt_val = r['Số điện thoại']
-                    prefix = sdt_val[:-3] + "***" if len(sdt_val) > 3 else "***"
-                    if row[3].button(f"📞 {prefix}", key=f"btn_{i}"):
+                    sdt_raw = r['Số điện thoại']
+                    prefix = sdt_raw[:-3] + "***" if len(sdt_raw) > 3 else "***"
+                    if row[4].button(f"📞 {prefix}", key=f"btn_{i}"):
                         st.session_state[s_key] = True
                         st.rerun()
                 
-                n_val = row[4].text_input("Ghi chú", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
+                n_val = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
                 
-                if row[5].button("💾", key=f"sv_{i}"):
+                if row[6].button("💾", key=f"sv_{i}"):
                     try:
                         cell = sh_data.find(r['Mã đầy đủ'])
                         g_col = h_names.index('Ghi chú') + 1
                         sh_data.update_cell(cell.row, g_col, n_val)
-                        st.toast(f"Đã cập nhật {r['Mã đầy đủ']}!", icon="✅")
-                    except: st.error("Lỗi lưu!")
+                        st.toast(f"Đã lưu!", icon="✅")
+                    except: st.error("Lỗi!")
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         else:
             if 'res_df' in st.session_state:
-                st.info("Nhập thông tin và bấm tìm kiếm để hiển thị dữ liệu.")
+                st.info("Nhập thông tin để xem kết quả.")
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
