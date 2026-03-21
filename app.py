@@ -11,16 +11,23 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
     
-    /* Ép dòng Xin chào và nút X nằm sát nhau trên cùng 1 hàng */
-    .header-container {
+    /* Container chứa lời chào và nút thoát - Ép về bên phải */
+    .custom-header {
         display: flex;
-        align-items: center;
         justify-content: flex-end;
-        gap: 8px; /* Khoảng cách nhỏ giữa tên và nút */
-        margin-top: -10px;
+        align-items: center;
+        gap: 12px;
+        margin-top: -20px;
+        margin-bottom: 20px;
+    }
+    
+    .user-greet {
+        font-size: 15px;
+        color: #333;
     }
 
-    .logout-btn-style button {
+    /* Định dạng lại nút đăng xuất để trông như một icon gọn gàng */
+    .stButton > button[key="logout_btn"] {
         background-color: #ff4b4b !important;
         color: white !important;
         border: none !important;
@@ -28,8 +35,10 @@ st.markdown("""
         height: 30px !important;
         border-radius: 4px !important;
         padding: 0 !important;
-        font-size: 14px !important;
-        line-height: 30px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1 !important;
     }
 
     .stButton button { width: 100%; border-radius: 6px; height: 38px; font-weight: bold; }
@@ -38,8 +47,6 @@ st.markdown("""
     div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
-    
-    /* Style cho thông báo lỗi dưới ô nhập */
     .error-msg { color: #ff4b4b; font-size: 13px; margin-top: 5px; font-weight: 500; }
     
     .brand-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 800; color: #1a1a1a; margin-bottom: 5px; text-align: center; }
@@ -47,7 +54,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# ... (Phần LIST_TANG_PHYSICAL và LIST_TRUC giữ nguyên) ...
+# ... (Giữ nguyên các biến LIST_TANG_PHYSICAL, LIST_TRUC và hàm init_connection) ...
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
@@ -91,18 +98,16 @@ if not st.session_state['logged_in']:
                 else: st.error("Tài khoản hoặc mật khẩu không đúng!")
             except: st.error("Lỗi kết nối dữ liệu người dùng.")
 else:
-    # --- 3. HEADER (THẲNG HÀNG SÁT NHAU) ---
-    h_col1, h_col2 = st.columns([6, 4])
-    with h_col2:
-        st.markdown(f"""
-            <div class="header-container">
-                <span>Xin chào <b>{st.session_state['user_name']}!</b></span>
-                <div class="logout-btn-style">
-        """, unsafe_allow_html=True)
+    # --- 3. HEADER (CỐ ĐỊNH GÓC PHẢI) ---
+    st.markdown('<div class="custom-header">', unsafe_allow_html=True)
+    c_greet, c_logout = st.columns([8.5, 1.5]) # Dùng tỷ lệ lệch hẳn về bên phải
+    with c_greet:
+        st.markdown(f'<div class="user-greet" style="text-align: right; padding-top: 5px;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
+    with c_logout:
         if st.button("❌", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
-        st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # --- 4. TẢI DỮ LIỆU ---
     try:
@@ -118,8 +123,10 @@ else:
         with tab_ma:
             c_in, c_btn, _ = st.columns([2, 0.8, 3])
             with c_in:
+                # Placeholder kèm ví dụ như bạn đã yêu cầu
                 search_ma = st.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn (VD: S1.01.10.20)...")
-                # HIỂN THỊ LỖI NGAY DƯỚI Ô NHẬP
+                
+                # THÔNG BÁO LỖI NGAY DƯỚI Ô NHẬP
                 if st.session_state['search_error']:
                     st.markdown(f"<div class='error-msg'>⚠️ {st.session_state['search_error']}</div>", unsafe_allow_html=True)
             
@@ -129,15 +136,15 @@ else:
                     if search_ma:
                         res = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
                         if res.empty:
-                            st.session_state['search_error'] = f"Mã căn '{search_ma}' không có trong dữ liệu."
+                            st.session_state['search_error'] = f"Mã căn '{search_ma}' không tồn tại."
                             st.session_state['res_df'] = pd.DataFrame()
                         else:
                             st.session_state['search_error'] = ""
                             st.session_state['res_df'] = res
                         st.rerun()
-
+        
+        # ... (Phần hiển thị bảng dữ liệu và lưu ghi chú giữ nguyên) ...
         with tab_tieuchi:
-            # (Phần lọc chi tiết giữ nguyên logic)
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
             with c1: 
                 ds_toa = sorted([t for t in df_main['Tòa'].unique() if t])
@@ -158,7 +165,6 @@ else:
                 t_df = t_df[t_df['Tầng'].isin(allowed)]
                 st.session_state['res_df'] = t_df
 
-        # --- 6. HIỂN THỊ DANH SÁCH ---
         res_display = st.session_state['res_df']
         if not res_display.empty:
             st.divider()
