@@ -8,13 +8,39 @@ st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initi
 
 st.markdown("""
     <style>
+    /* Google Font mới cho giao diện */
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+    
     [data-testid="stSidebar"] { display: none; }
     
     /* Căn giữa màn hình đăng nhập */
-    .stButton button { width: 100%; border-radius: 6px; height: 38px; }
-    div[data-testid="stTextInput"] input { height: 40px; }
+    .login-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
     
-    /* Header nội dung */
+    .brand-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 32px;
+        font-weight: 800;
+        color: #1a1a1a;
+        margin-bottom: 5px;
+    }
+    
+    .brand-sub {
+        font-family: 'Playfair Display', serif;
+        font-size: 18px;
+        color: #444;
+        margin-bottom: 30px;
+    }
+
+    .stButton button { width: 100%; border-radius: 6px; height: 38px; background-color: #2c3e50; color: white; }
+    div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
+    
+    /* Định dạng bảng và header */
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
     code { font-size: 14px !important; color: #1e88e5 !important; background-color: #f1f3f4 !important; border: 1px solid #dee2e6 !important; }
@@ -33,9 +59,10 @@ def init_connection():
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
+        # Kiểm tra xem có mở được file không
         return client.open("Data Vin")
     except Exception as e:
-        st.error(f"Lỗi kết nối: {e}")
+        st.error(f"Lỗi kết nối Google Sheets: {e}")
         return None
 
 doc = init_connection()
@@ -45,40 +72,46 @@ if 'res_df' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# --- 2. GIAO DIỆN ĐĂNG NHẬP (CĂN GIỮA) ---
+# --- 2. GIAO DIỆN ĐĂNG NHẬP (CĂN GIỮA & FONT ĐẸP) ---
 if not st.session_state['logged_in']:
-    _, mid_col, _ = st.columns([1, 1, 1])
+    _, mid_col, _ = st.columns([1, 1.2, 1])
     with mid_col:
-        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
-        st.title("🔐 Đăng nhập")
+        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+        # Tiêu đề mới với font đẹp
         st.markdown("""
-            <div style='color: #555; margin-bottom: 20px;'>
-                <b>Data Vinhomes Smart City</b><br>
-                Liên hệ Admin Ninh - 0912.791.925
+            <div class='login-wrapper'>
+                <div class='brand-title'>Data Vinhomes Smart City</div>
+                <div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>
             </div>
         """, unsafe_allow_html=True)
         
-        u_val = st.text_input("Tài khoản").strip()
-        p_val = st.text_input("Mật khẩu", type="password").strip()
+        u_val = st.text_input("Tài khoản", placeholder="Nhập tài khoản...").strip()
+        p_val = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu...").strip()
         
         if st.button("Đăng nhập"):
             try:
+                # Kiểm tra sheet QUAN_LY_USER
                 sh_u = doc.worksheet("QUAN_LY_USER")
-                users_df = pd.DataFrame(sh_u.get_all_records())
-                auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-                if not auth.empty:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
-                    st.rerun()
+                data_users = sh_u.get_all_records()
+                if not data_users:
+                    st.error("Dữ liệu người dùng trống!")
                 else:
-                    st.error("Tài khoản hoặc mật khẩu không đúng!")
-            except:
-                st.error("Lỗi kết nối dữ liệu người dùng.")
+                    users_df = pd.DataFrame(data_users)
+                    auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+                    if not auth.empty:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
+                        st.rerun()
+                    else:
+                        st.error("Tài khoản hoặc mật khẩu không đúng!")
+            except Exception as e:
+                # Báo lỗi cụ thể hơn để dễ fix
+                st.error(f"Không thể truy cập Sheet 'QUAN_LY_USER'. Hãy kiểm tra lại tên Sheet trong file Google Sheets của bạn. Chi tiết: {e}")
 else:
-    # --- 3. HEADER (XIN CHÀO & NÚT X ĐỎ) ---
+    # --- 3. HEADER ---
     h_left, h_right = st.columns([8, 2])
     with h_right:
-        c_user, c_logout = st.columns([4, 1])
+        c_user, c_logout = st.columns([4, 1.2])
         with c_user:
             st.markdown(f"<div style='padding-top: 8px; text-align: right; font-size: 14px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
         with c_logout:
@@ -140,7 +173,6 @@ else:
             st.divider()
             st.success(f"Tìm thấy {len(res_display)} căn hộ.")
             
-            # Header bảng
             cols_ui = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
             titles = ["Mã Căn", "Chủ Nhà", "Loại hình", "DT", "SĐT (Bấm xem)", "Ghi chú", "Lưu"]
             for ui, txt in zip(cols_ui, titles):
@@ -153,7 +185,6 @@ else:
                 row[2].write(r.get('Loại hình', '-'))
                 row[3].write(f"{r['Diện tích']}m²")
                 
-                # SĐT
                 s_key = f"v_{r['Mã đầy đủ']}"
                 if s_key in st.session_state and st.session_state[s_key]:
                     row[4].code(r['Số điện thoại'], language="text")
@@ -172,7 +203,7 @@ else:
                         g_col = h_names.index('Ghi chú') + 1
                         sh_data.update_cell(cell.row, g_col, n_val)
                         st.toast(f"Đã lưu!", icon="✅")
-                    except: st.error("Lỗi lưu!")
+                    except: st.error("Lỗi!")
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         else:
@@ -180,4 +211,4 @@ else:
                 st.info("Nhập thông tin để xem kết quả.")
 
     except Exception as e:
-        st.error(f"Lỗi: {e}")
+        st.error(f"Lỗi tải dữ liệu: {e}")
