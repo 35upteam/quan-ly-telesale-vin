@@ -12,13 +12,13 @@ st.markdown("""
     .stButton button { width: 100%; border-radius: 6px; height: 38px; }
     div[data-testid="stTextInput"] input { height: 40px; }
     
-    /* Header chào nhân viên và đăng xuất */
-    .user-container {
+    /* CSS cho khu vực Header User */
+    .user-header-box {
         display: flex;
         justify-content: flex-end;
         align-items: center;
-        gap: 15px;
-        margin-bottom: 15px;
+        gap: 10px;
+        margin-bottom: 10px;
     }
     
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
@@ -72,14 +72,16 @@ if not st.session_state['logged_in']:
             except:
                 st.error("Lỗi kết nối dữ liệu người dùng.")
 else:
-    # --- 3. HEADER (CHÀO & ĐĂNG XUẤT THẲNG HÀNG) ---
-    h_left, h_right = st.columns([7.5, 2.5])
+    # --- 3. HEADER (XIN CHÀO & NÚT X ĐỎ) ---
+    h_left, h_right = st.columns([7.8, 2.2])
     with h_right:
-        c_user, c_logout = st.columns([1.5, 1])
+        c_user, c_logout = st.columns([4, 1])
         with c_user:
-            st.markdown(f"<div style='padding-top: 8px; text-align: right;'>👤 {st.session_state['user_name']}!</div>", unsafe_allow_html=True)
+            # Thay đổi thành "Xin chào"
+            st.markdown(f"<div style='padding-top: 8px; text-align: right; font-size: 14px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
         with c_logout:
-            if st.button("🚪 Thoát", key="logout_btn"):
+            # Thay nút thoát bằng icon X đỏ
+            if st.button("❌", key="logout_btn", help="Đăng xuất"):
                 st.session_state.clear()
                 st.rerun()
 
@@ -137,7 +139,7 @@ else:
             st.divider()
             st.success(f"Tìm thấy {len(res_display)} căn hộ.")
             
-            # Header bảng (Đã thêm cột Loại hình)
+            # Header bảng
             cols_ui = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
             titles = ["Mã Căn", "Chủ Nhà", "Loại hình", "DT", "SĐT (Bấm xem)", "Ghi chú", "Lưu"]
             for ui, txt in zip(cols_ui, titles):
@@ -147,7 +149,7 @@ else:
                 row = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
                 row[0].write(f"**{r['Mã đầy đủ']}**")
                 row[1].write(r['Chủ nhà'])
-                row[2].write(r.get('Loại hình', '-')) # FIX: Thêm cột Loại hình
+                row[2].write(r.get('Loại hình', '-'))
                 row[3].write(f"{r['Diện tích']}m²")
                 
                 # SĐT
