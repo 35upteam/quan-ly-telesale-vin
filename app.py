@@ -12,6 +12,8 @@ st.markdown("""
     .header-text { font-weight: bold; color: #1f2d3d; border-bottom: 2px solid #dee2e6; padding-bottom: 5px; font-size: 14px; }
     div[data-testid="stTextInput"] input { height: 32px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #f0f2f6; padding: 10px 0; }
+    /* Chỉnh cho ô code chứa SĐT gọn hơn */
+    code { font-size: 14px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -30,7 +32,7 @@ def init_connection():
         client = gspread.authorize(creds)
         return client.open("Data Vin")
     except Exception as e:
-        st.error(f"Lỗi kết nối Google Sheets: {e}")
+        st.error(f"Lỗi kết nối: {e}")
         return None
 
 doc = init_connection()
@@ -50,7 +52,7 @@ if not st.session_state['logged_in']:
         try:
             sh_u = doc.worksheet("QUAN_LY_USER")
             users_df = pd.DataFrame(sh_u.get_all_records())
-            # FIX LỖI: Sử dụng .empty để kiểm tra kết quả lọc
+            # FIX: Sử dụng .empty để kiểm tra kết quả lọc thay vì so sánh trực tiếp dataframe
             auth_filter = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
             if not auth_filter.empty:
                 st.session_state['logged_in'] = True
@@ -59,7 +61,7 @@ if not st.session_state['logged_in']:
             else:
                 st.error("Thông tin đăng nhập không chính xác!")
         except:
-            st.error("Không thể truy cập dữ liệu người dùng.")
+            st.error("Không thể kết nối danh sách người dùng.")
 else:
     # --- 3. BỘ LỌC DỮ LIỆU ---
     st.sidebar.write(f"👤 Chào: **{st.session_state['user_name']}**")
@@ -73,7 +75,7 @@ else:
         h_names = raw_vals[0]
         df_main = pd.DataFrame(raw_vals[1:], columns=h_names)
         
-        # Làm sạch dữ liệu (Ép kiểu string và strip)
+        # Làm sạch dữ liệu từng ô
         for c in df_main.columns:
             df_main[c] = df_main[c].apply(lambda x: str(x).strip() if x else "")
 
@@ -88,13 +90,12 @@ else:
 
         if st.button("🚀 Thực hiện lọc"):
             t_df = df_main.copy()
-            # FIX LỖI: Sử dụng len() để kiểm tra danh sách chọn thay vì so sánh trực tiếp
+            # FIX: Dùng len() > 0 để kiểm tra danh sách đã chọn, tránh lỗi Ambiguous
             if len(sel_t) > 0:
                 t_df = t_df[t_df['Tòa'].isin(sel_t)]
             if len(sel_tr) > 0:
                 t_df = t_df[t_df['Trục'].isin(sel_tr)]
             
-            # Lọc theo tầng vật lý
             idx_s = LIST_TANG_PHYSICAL.index(f_s)
             idx_e = LIST_TANG_PHYSICAL.index(f_e)
             allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
@@ -107,7 +108,7 @@ else:
         
         if not display_df.empty:
             st.divider()
-            # Vẽ Header hàng ngang
+            # Header hàng ngang
             cols_ui = st.columns([1, 1, 0.6, 1.5, 2.5, 0.6])
             titles = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 👁️)", "Ghi chú nội bộ", "Lưu"]
             for ui, txt in zip(cols_ui, titles):
@@ -119,10 +120,10 @@ else:
                 row_ui[1].write(r['Chủ nhà'])
                 row_ui[2].write(f"{r['Diện tích']}m²")
                 
-                # SĐT & Copy tự động
+                # SĐT & Nút Copy (Sử dụng icon mắt)
                 s_key = f"v_{r['Mã đầy đủ']}"
                 if s_key in st.session_state and st.session_state[s_key]:
-                    # st.code tích hợp sẵn nút Copy ở góc trên bên phải
+                    # Dùng st.code để hiện số và có sẵn nút Copy mặc định của Streamlit
                     row_ui[3].code(r['Số điện thoại'], language="text")
                 else:
                     pre = r['Số điện thoại'][:4] if len(r['Số điện thoại']) > 4 else "0xxx"
@@ -130,26 +131,26 @@ else:
                         st.session_state[s_key] = True
                         st.rerun()
                 
-                # Nhập ghi chú
+                # Ô nhập ghi chú phẳng
                 note_val = row_ui[4].text_input("Note", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
                 
-                # Nút lưu
+                # Nút lưu 💾
                 if row_ui[5].button("💾", key=f"sv_{i}"):
                     try:
                         cell = sh_data.find(r['Mã đầy đủ'])
                         if 'Ghi chú' in h_names:
                             g_col = h_names.index('Ghi chú') + 1
                             sh_data.update_cell(cell.row, g_col, note_val)
-                            st.toast(f"Đã lưu thành công!", icon="✅")
+                            st.toast(f"Đã cập nhật {r['Mã đầy đủ']}!", icon="✅")
                         else:
-                            st.error("Cột 'Ghi chú' không tồn tại trên Sheet.")
+                            st.error("Sheet thiếu cột 'Ghi chú'")
                     except:
-                        st.error("Lỗi khi lưu dữ liệu.")
+                        st.error("Lỗi khi lưu!")
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         
         elif 'res_df' in st.session_state and len(st.session_state['res_df']) == 0:
-            st.info("Vui lòng chọn bộ lọc để xem danh sách căn hộ.")
+            st.info("Sử dụng bộ lọc phía trên để bắt đầu hiển thị danh sách.")
 
     except Exception as e:
-        st.error(f"Phát sinh lỗi hệ thống: {e}")
+        st.error(f"Lỗi: {e}")
