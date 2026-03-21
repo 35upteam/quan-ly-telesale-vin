@@ -5,9 +5,26 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
 # --- CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Hệ thống Telesale Vin", layout="wide")
+st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide")
 
-LIST_TANG_CHIEU_NGHI = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
+# CSS để làm đẹp giao diện (Card, Button, Table)
+st.markdown("""
+    <style>
+    .stButton button { width: 100%; border-radius: 8px; transition: 0.3s; }
+    .stButton button:hover { background-color: #f0f2f6; border-color: #007bff; }
+    .apartment-card {
+        background-color: white; padding: 15px; border-radius: 12px;
+        border: 1px solid #e6e9ef; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .info-label { color: #6c757d; font-size: 0.85rem; }
+    .info-value { font-weight: 600; color: #1f2d3d; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# Danh sách Trục & Tầng chuẩn
+LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
+LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 
 @st.cache_resource
 def init_connection():
@@ -20,123 +37,110 @@ def init_connection():
         client = gspread.authorize(creds)
         return client.open("Data Vin")
     except Exception as e:
-        st.error(f"Lỗi kết nối Google Sheets: {e}")
-        st.stop()
-
-def get_col(df, keywords):
-    """Hàm tự động tìm cột dựa trên từ khóa gần đúng"""
-    for col in df.columns:
-        for kw in keywords:
-            if kw.lower() in col.lower().strip():
-                return col
-    return None
+        st.error(f"Lỗi kết nối: {e}"); st.stop()
 
 doc = init_connection()
 
+# Khởi tạo session state
 if 'search_results' not in st.session_state: st.session_state['search_results'] = pd.DataFrame()
-if 'view_mode' not in st.session_state: st.session_state['view_mode'] = None
 
 # --- ĐĂNG NHẬP ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 if not st.session_state['logged_in']:
-    st.title("🔐 Đăng nhập")
-    u = st.text_input("Tên đăng nhập")
+    st.title("🔐 Hệ thống Nội bộ")
+    u = st.text_input("Tài khoản")
     p = st.text_input("Mật khẩu", type="password")
     if st.button("Đăng nhập"):
-        try:
-            sh_user = doc.worksheet("QUAN_LY_USER")
-            data_u = sh_user.get_all_values()
-            u_df = pd.DataFrame(data_u[1:], columns=data_u[0])
-            c_u = get_col(u_df, ["user", "tài khoản"])
-            c_p = get_col(u_df, ["pass", "mật khẩu"])
-            auth = u_df[(u_df[c_u].str.strip() == u.strip()) & (u_df[c_p].astype(str).str.strip() == p.strip())]
-            if not auth.empty:
-                st.session_state['logged_in'] = True
-                st.session_state['user_name'] = u
-                st.rerun()
-            else: st.error("Sai thông tin!")
-        except: st.error("Không tìm thấy tab QUAN_LY_USER")
+        sh_u = doc.worksheet("QUAN_LY_USER")
+        u_df = pd.DataFrame(sh_u.get_all_records())
+        if not u_df[(u_df['Username']==u) & (u_df['Password'].astype(str)==p)].empty:
+            st.session_state['logged_in'] = True; st.session_state['user_name'] = u; st.rerun()
+        else: st.error("Sai thông tin!")
 else:
-    st.sidebar.write(f"👤 {st.session_state['user_name']}")
-    if st.sidebar.button("Đăng xuất"):
-        st.session_state.clear()
-        st.rerun()
+    st.sidebar.write(f"👤 Chào {st.session_state['user_name']}")
+    if st.sidebar.button("Đăng xuất"): st.session_state.clear(); st.rerun()
 
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
-        raw_data = sh_data.get_all_values()
-        df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
-        
-        # TỰ ĐỘNG NHẬN DIỆN CỘT
-        COL_MA = get_col(df, ["mã đầy đủ", "mã căn", "full mã"])
-        COL_TOA = get_col(df, ["tòa", "block"])
-        COL_TANG = get_col(df, ["tầng", "floor"])
-        COL_TRUC = get_col(df, ["trục", "vị trí"])
-        COL_SDT = get_col(df, ["số điện thoại", "sđt", "phone"])
-        COL_CHU = get_col(df, ["chủ nhà", "tên chủ"])
-        COL_TT = get_col(df, ["trạng thái", "status"])
+        raw = sh_data.get_all_values()
+        df = pd.DataFrame(raw[1:], columns=raw[0])
+        for col in df.columns: df[col] = df[col].str.strip()
 
-        tab1, tab2 = st.tabs(["🔍 Tìm nhanh", "📂 Lọc nâng cao"])
+        tab1, tab2 = st.tabs(["🔍 Tìm mã cụ thể", "🛠️ Bộ lọc chuyên sâu"])
         
         with tab1:
-            m_input = st.text_input("Nhập mã căn (Ví dụ: S1.02...)").strip()
-            if st.button("Tìm kiếm"):
-                st.session_state['search_results'] = df[df[COL_MA].str.contains(m_input, case=False, na=False)]
-                st.session_state['view_mode'] = 'single'
+            m_in = st.text_input("Nhập mã (VD: S1.02-15-05)")
+            if st.button("Tìm nhanh"):
+                st.session_state['search_results'] = df[df['Mã đầy đủ'].str.contains(m_in, case=False, na=False)]
 
         with tab2:
-            c1, c2 = st.columns(2)
-            with c1:
-                list_t = sorted(list(df[COL_TOA].unique()))
-                sel_t = st.multiselect("Chọn Tòa", list_t)
-            with c2:
-                list_tr = sorted(list(df[COL_TRUC].unique()))
-                sel_tr = st.multiselect("Chọn Trục", list_tr)
+            c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1.5])
+            with c1: sel_t = st.multiselect("Tòa", sorted(df['Tòa'].unique()))
+            with c2: f_start = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=0)
+            with c3: f_end = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=len(LIST_TANG_PHYSICAL)-1)
+            with c4: sel_tr = st.multiselect("Trục căn", LIST_TRUC)
             
-            s_t, e_t = st.select_slider('Khoảng tầng', options=LIST_TANG_CHIEU_NGHI, value=("1", "39"))
-            
-            if st.button("🚀 Lọc danh sách"):
+            if st.button("⚡ Lọc danh sách"):
                 t_df = df.copy()
-                if sel_t: t_df = t_df[t_df[COL_TOA].isin(sel_t)]
-                if sel_tr: t_df = t_df[t_df[COL_TRUC].isin(sel_tr)]
+                if sel_t: t_df = t_df[t_df['Tòa'].isin(sel_t)]
+                if sel_tr: t_df = t_df[t_df['Trục'].isin(sel_tr)]
                 
-                idx_s = LIST_TANG_CHIEU_NGHI.index(s_t)
-                idx_e = LIST_TANG_CHIEU_NGHI.index(e_t)
-                allowed = LIST_TANG_CHIEU_NGHI[idx_s : idx_e + 1]
-                t_df = t_df[t_df[COL_TANG].astype(str).str.strip().isin(allowed)]
-                
+                # Logic lọc tầng
+                i_s, i_e = LIST_TANG_PHYSICAL.index(f_start), LIST_TANG_PHYSICAL.index(f_end)
+                allowed = LIST_TANG_PHYSICAL[i_s : i_e + 1]
+                t_df = t_df[t_df['Tầng'].isin(allowed)]
                 st.session_state['search_results'] = t_df
-                st.session_state['view_mode'] = 'table'
 
-        st.divider()
+        # --- HIỂN THỊ DANH SÁCH ---
         res = st.session_state['search_results']
-
         if not res.empty:
-            st.write(f"Tìm thấy **{len(res)}** kết quả.")
-            h = st.columns([1.5, 1.5, 1.5, 1, 1])
-            for col, n in zip(h, ["Mã Căn", "Chủ Nhà", "SĐT", "Loại", "Trạng Thái"]): col.markdown(f"**{n}**")
-            
-            for i, r in res.iterrows():
-                c = st.columns([1.5, 1.5, 1.5, 1, 1])
-                c[0].write(r[COL_MA])
-                c[1].write(r[COL_CHU])
-                
-                sk = f"sh_{r[COL_MA]}"
-                if sk in st.session_state and st.session_state[sk]:
-                    c[2].code(r[COL_SDT], language="text")
-                else:
-                    if c[2].button(f"👁️ {str(r[COL_SDT])[:3]}...", key=f"e_{r[COL_MA]}"):
-                        st.session_state[sk] = True
-                        st.rerun()
-                
-                c[3].write(r.get('Loại hình', '---'))
-                tt = r.get(COL_TT, 'Trống')
-                color = "green" if "Trống" in tt else "red" if "Đã bán" in tt else "orange"
-                c[4].markdown(f":{color}[{tt}]")
-        elif st.session_state['view_mode']:
-            st.warning("Không tìm thấy căn nào. Hãy thử nới lỏng bộ lọc.")
+            st.write(f"Tìm thấy **{len(res)}** căn hộ")
+            for idx, r in res.iterrows():
+                with st.container():
+                    # Giao diện Card
+                    st.markdown(f"""
+                    <div class="apartment-card">
+                        <span style="font-size:1.2rem; font-weight:bold; color:#007bff;">🏠 {r['Mã đầy đủ']}</span>
+                        <hr style="margin:10px 0;">
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col_info, col_note = st.columns([3, 2])
+                    
+                    with col_info:
+                        i1, i2, i3 = st.columns(3)
+                        i1.markdown(f"<div class='info-label'>Chủ nhà</div><div class='info-value'>{r['Chủ nhà']}</div>", unsafe_allow_html=True)
+                        i2.markdown(f"<div class='info-label'>Loại hình</div><div class='info-value'>{r['Loại hình']}</div>", unsafe_allow_html=True)
+                        i3.markdown(f"<div class='info-label'>Diện tích</div><div class='info-value'>{r['Diện tích']} m²</div>", unsafe_allow_html=True)
+                        
+                        # Phần SĐT bảo mật
+                        st.write("")
+                        c_p1, c_p2 = st.columns([2, 1])
+                        sdt_key = f"view_{r['Mã đầy đủ']}"
+                        if sdt_key in st.session_state and st.session_state[sdt_key]:
+                            c_p1.code(r['Số điện thoại'], language="text")
+                            if c_p2.button("Đóng", key=f"hide_{idx}"):
+                                del st.session_state[sdt_key]; st.rerun()
+                        else:
+                            if c_p1.button(f"🔓 Hiện số ({str(r['Số điện thoại'])[:4]}...)", key=f"btn_v_{idx}"):
+                                st.session_state[sdt_key] = True; st.rerun()
+                    
+                    with col_note:
+                        # Phần Ghi chú có thể lưu lại
+                        current_note = r.get('Ghi chú', '')
+                        new_note = st.text_area("Ghi chú khách hàng/căn hộ", value=current_note, key=f"note_{idx}", height=80)
+                        if st.button("💾 Lưu ghi chú", key=f"save_{idx}"):
+                            # Tìm dòng trong sheet để update (dựa vào Mã đầy đủ)
+                            cell = sh_data.find(r['Mã đầy đủ'])
+                            # Cột Ghi chú là cột cuối hoặc bạn có thể chỉ định số cột cụ thể
+                            col_index = raw[0].index('Ghi chú') + 1
+                            sh_data.update_cell(cell.row, col_index, new_note)
+                            st.toast("Đã cập nhật ghi chú lên Sheet!", icon="✅")
+
+        elif 'search_results' in st.session_state and not res.empty:
+            st.info("Sử dụng bộ lọc để xem danh sách.")
 
     except Exception as e:
-        st.error(f"Lỗi: {e}. Vui lòng kiểm tra tên các tab trong Google Sheets.")
+        st.error(f"Lỗi hệ thống: {e}")
