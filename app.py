@@ -11,34 +11,35 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
     
-    /* Nút X Đăng xuất màu đỏ, ép thẳng hàng */
+    /* Căn chỉnh header để tên và nút X nằm ngang hàng tuyệt đối */
+    .header-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
     .logout-btn-style button {
         background-color: #ff4b4b !important;
         color: white !important;
         border: none !important;
-        width: 38px !important;
-        height: 38px !important;
+        width: 32px !important;
+        height: 32px !important;
+        border-radius: 6px !important;
+        padding: 0 !important;
         display: flex;
         align-items: center;
         justify-content: center;
+        line-height: 1 !important;
     }
 
     .stButton button { width: 100%; border-radius: 6px; height: 38px; font-weight: bold; }
-    
-    /* Nút Tìm kiếm xanh dương */
-    div[data-testid="column"]:nth-of-type(2) button[kind="secondary"] {
-        background-color: #007bff;
-        color: white;
-        border: none;
-    }
-    
-    /* Nút Lưu xanh lá */
+    div[data-testid="column"]:nth-of-type(2) button[kind="secondary"] { background-color: #007bff; color: white; border: none; }
     .save-btn button { background-color: #28a745 !important; color: white !important; border: none !important; }
-
     div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
-    
     .brand-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 800; color: #1a1a1a; margin-bottom: 5px; text-align: center; }
     .brand-sub { font-family: 'Playfair Display', serif; font-size: 18px; color: #444; margin-bottom: 30px; text-align: center; }
     </style>
@@ -73,36 +74,34 @@ if not st.session_state['logged_in']:
         st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
         st.markdown("<div class='brand-title'>Data Vinhomes Smart City</div>", unsafe_allow_html=True)
         st.markdown("<div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>", unsafe_allow_html=True)
-        
         u_val = st.text_input("Tài khoản").strip()
         p_val = st.text_input("Mật khẩu", type="password").strip()
-        
-        if st.button("Đăng nhập") or (u_val and p_val and st.session_state.get('enter_pressed')):
+        if st.button("Đăng nhập"):
             try:
                 sh_u = doc.worksheet("QUAN_LY_USER")
                 data = sh_u.get_all_values()
-                users_df = pd.DataFrame(data[1:], columns=data[0]) # Cách đọc an toàn hơn
+                users_df = pd.DataFrame(data[1:], columns=data[0])
                 auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
                 if not auth.empty:
                     st.session_state['logged_in'] = True
                     st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
                     st.rerun()
                 else: st.error("Tài khoản hoặc mật khẩu không đúng!")
-            except Exception as e:
-                st.error(f"Lỗi kết nối dữ liệu người dùng: {e}")
+            except Exception as e: st.error(f"Lỗi: {e}")
 else:
-    # --- 3. HEADER (THẲNG HÀNG) ---
-    col_empty, col_header = st.columns([6.5, 3.5])
-    with col_header:
-        c_text, c_btn = st.columns([4, 1])
-        with c_text:
-            st.markdown(f"<div style='text-align: right; padding-top: 8px; font-size: 15px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
-        with c_btn:
-            st.markdown('<div class="logout-btn-style">', unsafe_allow_html=True)
-            if st.button("❌", key="logout_btn"):
-                st.session_state.clear()
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    # --- 3. HEADER (XỬ LÝ THẲNG HÀNG) ---
+    # Dùng markdown kết hợp columns để ép nút X nằm sát dòng chữ
+    h_col1, h_col2 = st.columns([7, 3])
+    with h_col2:
+        st.markdown(f"""
+            <div class="header-wrapper">
+                <span style="font-size: 15px;">Xin chào <b>{st.session_state['user_name']}!</b></span>
+                <div class="logout-btn-style">
+        """, unsafe_allow_html=True)
+        if st.button("❌", key="logout_btn"):
+            st.session_state.clear()
+            st.rerun()
+        st.markdown('</div></div>', unsafe_allow_html=True)
 
     # --- 4. TẢI DỮ LIỆU ---
     try:
@@ -118,13 +117,16 @@ else:
         with tab_ma:
             c_in, c_btn, _ = st.columns([2, 0.8, 3])
             with c_in:
-                # Placeholder kèm ví dụ cụ thể
                 search_ma = st.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn (VD: S1.01.10.20)...")
             with c_btn:
-                # Nhấn Enter trong ô input cũng sẽ kích hoạt tìm kiếm
-                if st.button("Tìm kiếm", key="btn_find_ma") or search_ma:
+                if st.button("Tìm kiếm", key="btn_find_ma") or (search_ma and st.session_state.get('last_ma') != search_ma):
                     if search_ma:
-                        st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
+                        st.session_state['last_ma'] = search_ma
+                        res = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
+                        # THÔNG BÁO KHI KHÔNG TÌM THẤY
+                        if res.empty:
+                            st.toast(f"Không tìm thấy mã căn: {search_ma}", icon="⚠️")
+                        st.session_state['res_df'] = res
 
         with tab_tieuchi:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
@@ -144,6 +146,8 @@ else:
                 idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
                 allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
                 t_df = t_df[t_df['Tầng'].isin(allowed)]
+                if t_df.empty:
+                    st.toast("Không tìm thấy căn hộ nào khớp với tiêu chí!", icon="ℹ️")
                 st.session_state['res_df'] = t_df
 
         # --- 6. HIỂN THỊ DANH SÁCH ---
@@ -183,5 +187,7 @@ else:
                     except: st.error("Lỗi!")
                 st.markdown('</div>', unsafe_allow_html=True)
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+        elif 'last_ma' in st.session_state and not res_display.empty:
+             st.info("Nhập thông tin để xem kết quả.")
 
     except Exception as e: st.error(f"Lỗi: {e}")
