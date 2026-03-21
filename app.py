@@ -7,17 +7,18 @@ from datetime import datetime
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide")
 
-# CSS làm đẹp giao diện
+# CSS làm đẹp giao diện Card và Button
 st.markdown("""
     <style>
-    .stButton button { width: 100%; border-radius: 8px; transition: 0.3s; }
+    .stButton button { width: 100%; border-radius: 8px; height: 35px; }
     .apartment-card {
-        background-color: white; padding: 15px; border-radius: 12px;
-        border: 1px solid #e6e9ef; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-        margin-bottom: 10px;
+        background-color: #ffffff; padding: 20px; border-radius: 15px;
+        border: 1px solid #eaeaea; shadow: 0 4px 6px rgba(0,0,0,0.02);
+        margin-bottom: 15px;
     }
-    .info-label { color: #6c757d; font-size: 0.85rem; }
-    .info-value { font-weight: 600; color: #1f2d3d; }
+    .info-label { color: #888; font-size: 0.8rem; margin-bottom: 2px; }
+    .info-value { font-weight: 700; color: #333; font-size: 1rem; }
+    .card-header { font-size: 1.2rem; font-weight: 800; color: #007bff; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -66,9 +67,9 @@ else:
         raw = sh_data.get_all_values()
         df = pd.DataFrame(raw[1:], columns=raw[0])
         
-        # SỬA LỖI TẠI ĐÂY: Ép kiểu string cho từng cột thay vì cả DataFrame
+        # FIX LỖI: Xử lý strip() an toàn cho từng cột
         for col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].fillna('').astype(str).str.strip()
 
         tab1, tab2 = st.tabs(["🔍 Tìm mã cụ thể", "🛠️ Bộ lọc chuyên sâu"])
         
@@ -91,56 +92,62 @@ else:
                 if sel_t: t_df = t_df[t_df['Tòa'].isin(sel_t)]
                 if sel_tr: t_df = t_df[t_df['Trục'].isin(sel_tr)]
                 
-                i_s, i_e = LIST_TANG_PHYSICAL.index(f_start), LIST_TANG_PHYSICAL.index(f_end)
-                allowed = LIST_TANG_PHYSICAL[i_s : i_e + 1]
-                t_df = t_df[t_df['Tầng'].isin(allowed)]
+                # Logic lọc tầng theo thứ tự vật lý
+                try:
+                    i_s, i_e = LIST_TANG_PHYSICAL.index(f_start), LIST_TANG_PHYSICAL.index(f_end)
+                    allowed = LIST_TANG_PHYSICAL[i_s : i_e + 1]
+                    t_df = t_df[t_df['Tầng'].isin(allowed)]
+                except: pass
                 st.session_state['search_results'] = t_df
 
         # --- HIỂN THỊ DANH SÁCH ---
         res = st.session_state['search_results']
         if not res.empty:
-            st.write(f"Tìm thấy **{len(res)}** kết quả")
+            st.write(f"Tìm thấy **{len(res)}** căn hộ")
             for idx, r in res.iterrows():
                 with st.container():
-                    st.markdown(f"""
-                    <div class="apartment-card">
-                        <span style="font-size:1.1rem; font-weight:bold; color:#007bff;">🏠 {r['Mã đầy đủ']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Card hiển thị đẹp hơn
+                    st.markdown(f'<div class="apartment-card"><div class="card-header">🏠 {r["Mã đầy đủ"]}</div>', unsafe_allow_html=True)
                     
-                    col_info, col_note = st.columns([3, 2])
-                    with col_info:
+                    c_info, c_note = st.columns([3, 2])
+                    
+                    with c_info:
                         i1, i2, i3 = st.columns(3)
                         i1.markdown(f"<div class='info-label'>Chủ nhà</div><div class='info-value'>{r.get('Chủ nhà','-')}</div>", unsafe_allow_html=True)
                         i2.markdown(f"<div class='info-label'>Loại hình</div><div class='info-value'>{r.get('Loại hình','-')}</div>", unsafe_allow_html=True)
                         i3.markdown(f"<div class='info-label'>Diện tích</div><div class='info-value'>{r.get('Diện tích','-')} m²</div>", unsafe_allow_html=True)
                         
                         st.write("")
-                        c_p1, c_p2 = st.columns([2, 1])
+                        cp1, cp2 = st.columns([2, 1])
                         sdt_key = f"view_{r['Mã đầy đủ']}"
+                        
                         if sdt_key in st.session_state and st.session_state[sdt_key]:
-                            c_p1.code(r.get('Số điện thoại','-'), language="text")
-                            if c_p2.button("Đóng", key=f"hide_{idx}"):
+                            cp1.code(r.get('Số điện thoại','-'), language="text")
+                            if cp2.button("Đóng", key=f"h_{idx}"):
                                 del st.session_state[sdt_key]; st.rerun()
                         else:
-                            sdt_show = str(r.get('Số điện thoại',''))[:4] + "..."
-                            if c_p1.button(f"🔓 Hiện số ({sdt_show})", key=f"btn_v_{idx}"):
+                            # Nút mở số điện thoại gọn gàng hơn
+                            sdt_prefix = str(r.get('Số điện thoại',''))[:4]
+                            if cp1.button(f"📋 Hiện số ({sdt_prefix}...)", key=f"v_{idx}"):
                                 st.session_state[sdt_key] = True; st.rerun()
                     
-                    with col_note:
+                    with c_note:
                         current_note = r.get('Ghi chú', '')
-                        new_note = st.text_area("Ghi chú", value=current_note, key=f"note_{idx}", height=68)
-                        if st.button("💾 Lưu", key=f"save_{idx}"):
+                        new_note = st.text_area("Ghi chú nội bộ", value=current_note, key=f"n_{idx}", height=85)
+                        if st.button("💾 Lưu ghi chú", key=f"s_{idx}"):
                             try:
+                                # Cập nhật trực tiếp lên Sheet
                                 cell = sh_data.find(r['Mã đầy đủ'])
-                                col_index = raw[0].index('Ghi chú') + 1
-                                sh_data.update_cell(cell.row, col_index, new_note)
-                                st.toast("Đã lưu ghi chú!", icon="✅")
-                            except:
-                                st.error("Không tìm thấy cột 'Ghi chú' trên Sheet!")
-
-        elif 'search_results' in st.session_state and not st.session_state['search_results'].empty:
-            pass # Tránh hiện lỗi khi mới khởi động
+                                header = raw[0]
+                                if 'Ghi chú' in header:
+                                    col_idx = header.index('Ghi chú') + 1
+                                    sh_data.update_cell(cell.row, col_idx, new_note)
+                                    st.toast("Đã lưu thành công!", icon="✅")
+                                else:
+                                    st.error("Sheet thiếu cột 'Ghi chú'!")
+                            except Exception as e:
+                                st.error(f"Lỗi lưu: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True) # Kết thúc div card
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
