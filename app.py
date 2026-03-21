@@ -8,42 +8,41 @@ st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initi
 
 st.markdown("""
     <style>
-    /* Google Font mới cho giao diện */
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     
     [data-testid="stSidebar"] { display: none; }
     
-    /* Căn giữa màn hình đăng nhập */
-    .login-wrapper {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-    }
+    /* Màu sắc nút bấm tùy chỉnh */
+    .stButton button { width: 100%; border-radius: 6px; height: 38px; font-weight: bold; }
     
-    .brand-title {
-        font-family: 'Playfair Display', serif;
-        font-size: 32px;
-        font-weight: 800;
-        color: #1a1a1a;
-        margin-bottom: 5px;
-    }
-    
-    .brand-sub {
-        font-family: 'Playfair Display', serif;
-        font-size: 18px;
-        color: #444;
-        margin-bottom: 30px;
+    /* Nút Tìm kiếm màu xanh dương */
+    div[data-testid="column"]:nth-of-type(2) button[kind="secondary"] {
+        background-color: #007bff;
+        color: white;
+        border: none;
     }
 
-    .stButton button { width: 100%; border-radius: 6px; height: 38px; background-color: #2c3e50; color: white; }
-    div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
+    /* Nút X Đăng xuất màu đỏ */
+    .logout-container button {
+        background-color: #ff4b4b !important;
+        color: white !important;
+        border: none !important;
+    }
     
-    /* Định dạng bảng và header */
+    /* Nút Lưu màu xanh lá */
+    .save-btn button {
+        background-color: #28a745 !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    div[data-testid="stTextInput"] input { height: 42px; border-radius: 6px; }
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
     code { font-size: 14px !important; color: #1e88e5 !important; background-color: #f1f3f4 !important; border: 1px solid #dee2e6 !important; }
+    
+    .brand-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 800; color: #1a1a1a; margin-bottom: 5px; text-align: center; }
+    .brand-sub { font-family: 'Playfair Display', serif; font-size: 18px; color: #444; margin-bottom: 30px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -59,10 +58,9 @@ def init_connection():
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
-        # Kiểm tra xem có mở được file không
         return client.open("Data Vin")
     except Exception as e:
-        st.error(f"Lỗi kết nối Google Sheets: {e}")
+        st.error(f"Lỗi kết nối: {e}")
         return None
 
 doc = init_connection()
@@ -72,52 +70,43 @@ if 'res_df' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# --- 2. GIAO DIỆN ĐĂNG NHẬP (CĂN GIỮA & FONT ĐẸP) ---
+# --- 2. ĐĂNG NHẬP ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.2, 1])
     with mid_col:
         st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
-        # Tiêu đề mới với font đẹp
-        st.markdown("""
-            <div class='login-wrapper'>
-                <div class='brand-title'>Data Vinhomes Smart City</div>
-                <div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div class='brand-title'>Data Vinhomes Smart City</div>", unsafe_allow_html=True)
+        st.markdown("<div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>", unsafe_allow_html=True)
         
-        u_val = st.text_input("Tài khoản", placeholder="Nhập tài khoản...").strip()
-        p_val = st.text_input("Mật khẩu", type="password", placeholder="Nhập mật khẩu...").strip()
+        u_val = st.text_input("Tài khoản").strip()
+        p_val = st.text_input("Mật khẩu", type="password").strip()
         
         if st.button("Đăng nhập"):
             try:
-                # Kiểm tra sheet QUAN_LY_USER
                 sh_u = doc.worksheet("QUAN_LY_USER")
-                data_users = sh_u.get_all_records()
-                if not data_users:
-                    st.error("Dữ liệu người dùng trống!")
+                users_df = pd.DataFrame(sh_u.get_all_records())
+                auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+                if not auth.empty:
+                    st.session_state['logged_in'] = True
+                    st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
+                    st.rerun()
                 else:
-                    users_df = pd.DataFrame(data_users)
-                    auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-                    if not auth.empty:
-                        st.session_state['logged_in'] = True
-                        st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
-                        st.rerun()
-                    else:
-                        st.error("Tài khoản hoặc mật khẩu không đúng!")
-            except Exception as e:
-                # Báo lỗi cụ thể hơn để dễ fix
-                st.error(f"Không thể truy cập Sheet 'QUAN_LY_USER'. Hãy kiểm tra lại tên Sheet trong file Google Sheets của bạn. Chi tiết: {e}")
+                    st.error("Tài khoản hoặc mật khẩu không đúng!")
+            except:
+                st.error("Lỗi kết nối dữ liệu người dùng.")
 else:
-    # --- 3. HEADER ---
+    # --- 3. HEADER (NÚT X ĐỎ) ---
     h_left, h_right = st.columns([8, 2])
     with h_right:
         c_user, c_logout = st.columns([4, 1.2])
         with c_user:
             st.markdown(f"<div style='padding-top: 8px; text-align: right; font-size: 14px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
         with c_logout:
+            st.markdown('<div class="logout-container">', unsafe_allow_html=True)
             if st.button("❌", key="logout_btn"):
                 st.session_state.clear()
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # --- 4. TẢI DỮ LIỆU ---
     try:
@@ -138,11 +127,11 @@ else:
             with c_in:
                 search_ma = st.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn...")
             with c_btn:
+                # Nút Tìm kiếm màu xanh
                 if st.button("Tìm kiếm", key="btn_find_ma"):
                     if search_ma:
                         st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
-                    else:
-                        st.warning("Nhập mã căn!")
+                    else: st.warning("Nhập mã căn!")
 
         with tab_tieuchi:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
@@ -197,6 +186,8 @@ else:
                 
                 n_val = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
                 
+                # Nút Lưu màu xanh lá
+                st.markdown('<div class="save-btn">', unsafe_allow_html=True)
                 if row[6].button("💾", key=f"sv_{i}"):
                     try:
                         cell = sh_data.find(r['Mã đầy đủ'])
@@ -204,6 +195,7 @@ else:
                         sh_data.update_cell(cell.row, g_col, n_val)
                         st.toast(f"Đã lưu!", icon="✅")
                     except: st.error("Lỗi!")
+                st.markdown('</div>', unsafe_allow_html=True)
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         else:
