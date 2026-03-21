@@ -12,12 +12,11 @@ st.markdown("""
     .header-text { font-weight: bold; color: #1f2d3d; border-bottom: 2px solid #dee2e6; padding-bottom: 5px; font-size: 14px; }
     div[data-testid="stTextInput"] input { height: 32px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #f0f2f6; padding: 10px 0; }
-    /* Chỉnh cho ô code chứa SĐT gọn hơn */
-    code { font-size: 14px !important; }
+    code { font-size: 14px !important; color: #e83e8c; }
     </style>
     """, unsafe_allow_html=True)
 
-# Danh sách chuẩn cho bộ lọc
+# Danh sách chuẩn
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
@@ -37,31 +36,34 @@ def init_connection():
 
 doc = init_connection()
 
-# Khởi tạo session state
+# Khởi tạo session state an toàn (Kiểm tra kỹ kiểu dữ liệu)
 if 'res_df' not in st.session_state:
     st.session_state['res_df'] = pd.DataFrame()
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
 # --- 2. ĐĂNG NHẬP ---
-if not st.session_state['logged_in']:
+if st.session_state['logged_in'] == False:
     st.title("🔐 Đăng nhập hệ thống")
     u_val = st.text_input("Tài khoản").strip()
     p_val = st.text_input("Mật khẩu", type="password").strip()
+    
     if st.button("Đăng nhập"):
         try:
             sh_u = doc.worksheet("QUAN_LY_USER")
             users_df = pd.DataFrame(sh_u.get_all_records())
-            # FIX: Sử dụng .empty để kiểm tra kết quả lọc thay vì so sánh trực tiếp dataframe
+            
+            # SỬA LỖI TẠI ĐÂY: Dùng .empty để kiểm tra bảng kết quả
             auth_filter = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+            
             if not auth_filter.empty:
                 st.session_state['logged_in'] = True
                 st.session_state['user_name'] = u_val
                 st.rerun()
             else:
-                st.error("Thông tin đăng nhập không chính xác!")
-        except:
-            st.error("Không thể kết nối danh sách người dùng.")
+                st.error("Tài khoản hoặc mật khẩu không đúng!")
+        except Exception as e:
+            st.error(f"Lỗi truy cập dữ liệu: {e}")
 else:
     # --- 3. BỘ LỌC DỮ LIỆU ---
     st.sidebar.write(f"👤 Chào: **{st.session_state['user_name']}**")
@@ -75,82 +77,88 @@ else:
         h_names = raw_vals[0]
         df_main = pd.DataFrame(raw_vals[1:], columns=h_names)
         
-        # Làm sạch dữ liệu từng ô
-        for c in df_main.columns:
-            df_main[c] = df_main[c].apply(lambda x: str(x).strip() if x else "")
+        # Làm sạch dữ liệu an toàn
+        for col in df_main.columns:
+            df_main[col] = df_main[col].apply(lambda x: str(x).strip() if x else "")
 
-        # Khu vực bộ lọc
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 1.5])
-        with col1: 
-            toas = sorted([t for t in df_main['Tòa'].unique() if t])
-            sel_t = st.multiselect("Tòa", toas)
-        with col2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
-        with col3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
-        with col4: sel_tr = st.multiselect("Trục", LIST_TRUC)
+        # Khu vực bộ lọc phẳng
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
+        with c1: 
+            ds_toa = sorted([t for t in df_main['Tòa'].unique() if t])
+            sel_toa = st.multiselect("Chọn Tòa", ds_toa)
+        with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
+        with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
+        with c4: sel_tr = st.multiselect("Chọn Trục", LIST_TRUC)
 
         if st.button("🚀 Thực hiện lọc"):
-            t_df = df_main.copy()
-            # FIX: Dùng len() > 0 để kiểm tra danh sách đã chọn, tránh lỗi Ambiguous
-            if len(sel_t) > 0:
-                t_df = t_df[t_df['Tòa'].isin(sel_t)]
+            temp_df = df_main.copy()
+            
+            # SỬA LỖI TẠI ĐÂY: Sử dụng len() > 0 thay vì kiểm tra danh sách trực tiếp
+            if len(sel_toa) > 0:
+                temp_df = temp_df[temp_df['Tòa'].isin(sel_toa)]
             if len(sel_tr) > 0:
-                t_df = t_df[t_df['Trục'].isin(sel_tr)]
+                temp_df = temp_df[temp_df['Trục'].isin(sel_tr)]
             
-            idx_s = LIST_TANG_PHYSICAL.index(f_s)
-            idx_e = LIST_TANG_PHYSICAL.index(f_e)
-            allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
-            t_df = t_df[t_df['Tầng'].isin(allowed)]
-            
-            st.session_state['res_df'] = t_df
-
-        # --- 4. HIỂN THỊ DANH SÁCH ---
-        display_df = st.session_state['res_df']
-        
-        if not display_df.empty:
-            st.divider()
-            # Header hàng ngang
-            cols_ui = st.columns([1, 1, 0.6, 1.5, 2.5, 0.6])
-            titles = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 👁️)", "Ghi chú nội bộ", "Lưu"]
-            for ui, txt in zip(cols_ui, titles):
-                ui.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
-
-            for i, r in display_df.iterrows():
-                row_ui = st.columns([1, 1, 0.6, 1.5, 2.5, 0.6])
-                row_ui[0].write(f"**{r['Mã đầy đủ']}**")
-                row_ui[1].write(r['Chủ nhà'])
-                row_ui[2].write(f"{r['Diện tích']}m²")
+            # Logic lọc tầng theo thứ tự vật lý
+            try:
+                idx_s = LIST_TANG_PHYSICAL.index(f_s)
+                idx_e = LIST_TANG_PHYSICAL.index(f_e)
+                allowed_floors = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
+                temp_df = temp_df[temp_df['Tầng'].isin(allowed_floors)]
+            except:
+                pass
                 
-                # SĐT & Nút Copy (Sử dụng icon mắt)
+            st.session_state['res_df'] = temp_df
+
+        # --- 4. HIỂN THỊ DANH SÁCH HÀNG NGANG ---
+        res_display = st.session_state['res_df']
+        
+        # SỬA LỖI TẠI ĐÂY: Dùng .empty để kiểm tra DataFrame
+        if not res_display.empty:
+            st.divider()
+            # Vẽ Header bảng
+            h_cols = st.columns([1, 1, 0.6, 1.3, 2.5, 0.7])
+            labels = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 👁️)", "Ghi chú nội bộ", "Lưu"]
+            for ui, lb in zip(h_cols, labels):
+                ui.markdown(f"<div class='header-text'>{lb}</div>", unsafe_allow_html=True)
+
+            for i, r in res_display.iterrows():
+                row = st.columns([1, 1, 0.6, 1.3, 2.5, 0.7])
+                row[0].write(f"**{r['Mã đầy đủ']}**")
+                row[1].write(r['Chủ nhà'])
+                row[2].write(f"{r['Diện tích']}m²")
+                
+                # SĐT & Nút Copy nhanh
                 s_key = f"v_{r['Mã đầy đủ']}"
-                if s_key in st.session_state and st.session_state[s_key]:
-                    # Dùng st.code để hiện số và có sẵn nút Copy mặc định của Streamlit
-                    row_ui[3].code(r['Số điện thoại'], language="text")
+                if s_key in st.session_state and st.session_state[s_key] == True:
+                    # st.code tạo ra ô văn bản có sẵn nút Copy ở góc phải
+                    row[3].code(r['Số điện thoại'], language="text")
                 else:
                     pre = r['Số điện thoại'][:4] if len(r['Số điện thoại']) > 4 else "0xxx"
-                    if row_ui[3].button(f"👁️ {pre}...", key=f"btn_{i}"):
+                    if row[3].button(f"👁️ {pre}...", key=f"btn_{i}"):
                         st.session_state[s_key] = True
                         st.rerun()
                 
-                # Ô nhập ghi chú phẳng
-                note_val = row_ui[4].text_input("Note", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
-                
-                # Nút lưu 💾
-                if row_ui[5].button("💾", key=f"sv_{i}"):
+                # Ghi chú & Nút lưu
+                n_val = row[4].text_input("Note", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
+                if row[5].button("💾", key=f"sv_{i}"):
                     try:
-                        cell = sh_data.find(r['Mã đầy đủ'])
+                        target = sh_data.find(r['Mã đầy đủ'])
                         if 'Ghi chú' in h_names:
-                            g_col = h_names.index('Ghi chú') + 1
-                            sh_data.update_cell(cell.row, g_col, note_val)
-                            st.toast(f"Đã cập nhật {r['Mã đầy đủ']}!", icon="✅")
+                            g_idx = h_names.index('Ghi chú') + 1
+                            sh_data.update_cell(target.row, g_idx, n_val)
+                            st.toast(f"Đã cập nhật!", icon="✅")
                         else:
-                            st.error("Sheet thiếu cột 'Ghi chú'")
+                            st.error("Sheet thiếu cột Ghi chú!")
                     except:
-                        st.error("Lỗi khi lưu!")
+                        st.error("Lỗi lưu!")
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         
-        elif 'res_df' in st.session_state and len(st.session_state['res_df']) == 0:
-            st.info("Sử dụng bộ lọc phía trên để bắt đầu hiển thị danh sách.")
+        else:
+            # Kiểm tra nếu đã bấm lọc nhưng không có kết quả
+            if 'res_df' in st.session_state and len(st.session_state['res_df']) == 0:
+                st.info("Không tìm thấy căn hộ nào phù hợp hoặc hãy nhấn 'Lọc' để xem.")
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
