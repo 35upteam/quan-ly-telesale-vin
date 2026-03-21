@@ -1,7 +1,6 @@
 def init_connection():
     creds_info = st.secrets["gcp_service_account"]
-    
-    # Dòng này cực kỳ quan trọng: Tự động sửa lỗi xuống dòng trong private_key
+    # Đảm bảo dòng này lùi vào đúng bằng các dòng khác
     creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n")
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
