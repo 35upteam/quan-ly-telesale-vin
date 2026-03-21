@@ -11,23 +11,6 @@ st.markdown("""
     [data-testid="stSidebar"] { display: none; }
     
     /* Căn giữa màn hình đăng nhập */
-    .login-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding-top: 50px;
-    }
-    
-    .login-box {
-        width: 350px;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        background-color: white;
-        text-align: center;
-    }
-
     .stButton button { width: 100%; border-radius: 6px; height: 38px; }
     div[data-testid="stTextInput"] input { height: 40px; }
     
@@ -35,9 +18,6 @@ st.markdown("""
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
     code { font-size: 14px !important; color: #1e88e5 !important; background-color: #f1f3f4 !important; border: 1px solid #dee2e6 !important; }
-    
-    /* Text giới thiệu */
-    .sub-text { color: #666; font-size: 14px; margin-bottom: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -136,4 +116,68 @@ else:
             with c1: 
                 ds_toa = sorted([t for t in df_main['Tòa'].unique() if t])
                 sel_t = st.multiselect("Chọn Tòa", ds_toa)
-            with c2
+            with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
+            with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
+            with c4: sel_tr = st.multiselect("Chọn Trục", LIST_TRUC)
+            
+            if st.button("🚀 Thực hiện lọc", key="btn_filter"):
+                t_df = df_main.copy()
+                if len(sel_t) > 0:
+                    sel_t_cl = [x.replace(".", "") for x in sel_t]
+                    t_df = t_df[t_df['Tòa_Clean'].isin(sel_t_cl)]
+                if len(sel_tr) > 0:
+                    t_df = t_df[t_df['Trục_Clean'].isin(sel_tr)]
+                
+                idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
+                allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
+                t_df = t_df[t_df['Tầng'].isin(allowed)]
+                st.session_state['res_df'] = t_df
+
+        # --- 6. HIỂN THỊ DANH SÁCH ---
+        res_display = st.session_state['res_df']
+        
+        if not res_display.empty:
+            st.divider()
+            st.success(f"Tìm thấy {len(res_display)} căn hộ.")
+            
+            # Header bảng
+            cols_ui = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
+            titles = ["Mã Căn", "Chủ Nhà", "Loại hình", "DT", "SĐT (Bấm xem)", "Ghi chú", "Lưu"]
+            for ui, txt in zip(cols_ui, titles):
+                ui.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
+
+            for i, r in res_display.iterrows():
+                row = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
+                row[0].write(f"**{r['Mã đầy đủ']}**")
+                row[1].write(r['Chủ nhà'])
+                row[2].write(r.get('Loại hình', '-'))
+                row[3].write(f"{r['Diện tích']}m²")
+                
+                # SĐT
+                s_key = f"v_{r['Mã đầy đủ']}"
+                if s_key in st.session_state and st.session_state[s_key]:
+                    row[4].code(r['Số điện thoại'], language="text")
+                else:
+                    sdt_raw = r['Số điện thoại']
+                    prefix = sdt_raw[:-3] + "***" if len(sdt_raw) > 3 else "***"
+                    if row[4].button(f"📞 {prefix}", key=f"btn_{i}"):
+                        st.session_state[s_key] = True
+                        st.rerun()
+                
+                n_val = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
+                
+                if row[6].button("💾", key=f"sv_{i}"):
+                    try:
+                        cell = sh_data.find(r['Mã đầy đủ'])
+                        g_col = h_names.index('Ghi chú') + 1
+                        sh_data.update_cell(cell.row, g_col, n_val)
+                        st.toast(f"Đã lưu!", icon="✅")
+                    except: st.error("Lỗi lưu!")
+                
+                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+        else:
+            if 'res_df' in st.session_state:
+                st.info("Nhập thông tin để xem kết quả.")
+
+    except Exception as e:
+        st.error(f"Lỗi: {e}")
