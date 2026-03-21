@@ -50,7 +50,6 @@ if st.session_state['logged_in'] is False:
         try:
             sh_u = doc.worksheet("QUAN_LY_USER")
             users_df = pd.DataFrame(sh_u.get_all_records())
-            # FIX: Kiểm tra rỗng bằng .empty
             auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
             if not auth.empty:
                 st.session_state['logged_in'] = True
@@ -73,7 +72,7 @@ else:
         h_names = raw_vals[0]
         df_main = pd.DataFrame(raw_vals[1:], columns=h_names)
         
-        # FIX LỖI '.str': Dùng applymap để làm sạch toàn bộ bảng an toàn
+        # Làm sạch và ép kiểu string toàn bộ bảng để lọc chính xác
         df_main = df_main.applymap(lambda x: str(x).strip() if x is not None else "")
 
         c1, c2, c3, c4 = st.columns([1, 1, 1, 1.5])
@@ -85,21 +84,36 @@ else:
         with c4: sel_tr = st.multiselect("Trục", LIST_TRUC)
 
         if st.button("🚀 Thực hiện lọc"):
+            # BẮT ĐẦU QUÁ TRÌNH LỌC
             t_df = df_main.copy()
+            
+            # 1. Lọc theo Tòa (nếu có chọn)
             if len(sel_t) > 0:
                 t_df = t_df[t_df['Tòa'].isin(sel_t)]
+            
+            # 2. Lọc theo Trục (nếu có chọn)
             if len(sel_tr) > 0:
+                # Đảm bảo trục trong DF luôn có 2 chữ số (ví dụ '01', '02') để khớp với LIST_TRUC
+                t_df['Trục'] = t_df['Trục'].apply(lambda x: x.zfill(2) if x.isdigit() else x)
                 t_df = t_df[t_df['Trục'].isin(sel_tr)]
             
-            idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
-            allowed = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
-            t_df = t_df[t_df['Tầng'].isin(allowed)]
+            # 3. Lọc theo khoảng Tầng
+            try:
+                idx_s = LIST_TANG_PHYSICAL.index(f_s)
+                idx_e = LIST_TANG_PHYSICAL.index(f_e)
+                allowed_floors = LIST_TANG_PHYSICAL[idx_s : idx_e + 1]
+                t_df = t_df[t_df['Tầng'].isin(allowed_floors)]
+            except:
+                st.warning("Lỗi định dạng tầng, vui lòng kiểm tra lại cột Tầng trên Sheet.")
+            
+            # Cập nhật kết quả vào session_state
             st.session_state['res_df'] = t_df
 
-        # --- 4. HIỂN THỊ DẠNG BẢNG NGANG ---
+        # --- 4. HIỂN THỊ DANH SÁCH ---
         res_display = st.session_state['res_df']
         
         if not res_display.empty:
+            st.write(f"🔍 Tìm thấy **{len(res_display)}** căn hộ phù hợp.")
             st.divider()
             h_cols = st.columns([1, 1, 0.6, 1.3, 2.5, 0.6])
             titles = ["Mã Căn", "Chủ Nhà", "DT", "SĐT (Bấm 👁️)", "Ghi chú nội bộ", "Lưu"]
@@ -112,10 +126,8 @@ else:
                 row[1].write(r['Chủ nhà'])
                 row[2].write(f"{r['Diện tích']}m²")
                 
-                # SĐT & Icon mắt & Nút Copy (Sử dụng st.code)
                 s_key = f"v_{r['Mã đầy đủ']}"
                 if s_key in st.session_state and st.session_state[s_key] is True:
-                    # Ô code có sẵn nút Copy mặc định của Streamlit
                     row[3].code(r['Số điện thoại'], language="text")
                 else:
                     pre = r['Số điện thoại'][:4] if len(r['Số điện thoại']) > 4 else "0xxx"
@@ -123,7 +135,6 @@ else:
                         st.session_state[s_key] = True
                         st.rerun()
                 
-                # Ghi chú phẳng
                 note_val = row[4].text_input("N", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
                 
                 if row[5].button("💾", key=f"sv_{i}"):
@@ -132,14 +143,14 @@ else:
                         if 'Ghi chú' in h_names:
                             g_col = h_names.index('Ghi chú') + 1
                             sh_data.update_cell(cell.row, g_col, note_val)
-                            st.toast(f"Đã cập nhật!", icon="✅")
+                            st.toast(f"Đã lưu thành công!", icon="✅")
                         else: st.error("Thiếu cột Ghi chú")
                     except: st.error("Lỗi lưu!")
                 
                 st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
         else:
             if 'res_df' in st.session_state:
-                st.info("Bấm 'Lọc' để hiển thị danh sách.")
+                st.info("Không có dữ liệu phù hợp hoặc hãy nhấn 'Lọc' để cập nhật.")
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
