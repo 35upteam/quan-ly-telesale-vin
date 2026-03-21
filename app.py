@@ -12,21 +12,26 @@ st.markdown("""
     
     [data-testid="stSidebar"] { display: none; }
     
-    /* Màu sắc nút bấm tùy chỉnh */
+    /* CSS Căn chỉnh Header */
     .stButton button { width: 100%; border-radius: 6px; height: 38px; font-weight: bold; }
     
+    /* Nút X Đăng xuất màu đỏ */
+    .logout-btn-style button {
+        background-color: #ff4b4b !important;
+        color: white !important;
+        border: none !important;
+        width: 38px !important;
+        height: 38px !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
     /* Nút Tìm kiếm màu xanh dương */
     div[data-testid="column"]:nth-of-type(2) button[kind="secondary"] {
         background-color: #007bff;
         color: white;
         border: none;
-    }
-
-    /* Nút X Đăng xuất màu đỏ */
-    .logout-container button {
-        background-color: #ff4b4b !important;
-        color: white !important;
-        border: none !important;
     }
     
     /* Nút Lưu màu xanh lá */
@@ -95,14 +100,14 @@ if not st.session_state['logged_in']:
             except:
                 st.error("Lỗi kết nối dữ liệu người dùng.")
 else:
-    # --- 3. HEADER (NÚT X ĐỎ) ---
-    h_left, h_right = st.columns([8, 2])
-    with h_right:
-        c_user, c_logout = st.columns([4, 1.2])
-        with c_user:
-            st.markdown(f"<div style='padding-top: 8px; text-align: right; font-size: 14px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
-        with c_logout:
-            st.markdown('<div class="logout-container">', unsafe_allow_html=True)
+    # --- 3. HEADER ---
+    col_empty, col_header = st.columns([6, 4])
+    with col_header:
+        c_text, c_btn = st.columns([4, 1])
+        with c_text:
+            st.markdown(f"<div style='text-align: right; padding-top: 8px; font-size: 15px;'>Xin chào <b>{st.session_state['user_name']}!</b></div>", unsafe_allow_html=True)
+        with c_btn:
+            st.markdown('<div class="logout-btn-style">', unsafe_allow_html=True)
             if st.button("❌", key="logout_btn"):
                 st.session_state.clear()
                 st.rerun()
@@ -125,9 +130,14 @@ else:
         with tab_ma:
             c_in, c_btn, _ = st.columns([2, 0.8, 3])
             with c_in:
-                search_ma = st.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn...")
+                # CẬP NHẬT PLACEHOLDER TẠI ĐÂY
+                search_ma = st.text_input(
+                    "Mã căn", 
+                    key="input_ma", 
+                    label_visibility="collapsed", 
+                    placeholder="Nhập mã căn (VD: S1.01.10.20)..."
+                )
             with c_btn:
-                # Nút Tìm kiếm màu xanh
                 if st.button("Tìm kiếm", key="btn_find_ma"):
                     if search_ma:
                         st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
@@ -186,7 +196,6 @@ else:
                 
                 n_val = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"in_{i}", label_visibility="collapsed")
                 
-                # Nút Lưu màu xanh lá
                 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
                 if row[6].button("💾", key=f"sv_{i}"):
                     try:
