@@ -7,7 +7,7 @@ from datetime import datetime
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Hệ thống Telesale Vin", layout="wide")
 
-# Danh sách Tòa chuẩn Vinhomes Smart City theo yêu cầu
+# Danh sách Tòa chuẩn Vinhomes Smart City
 LIST_TOA = [
     "S1.01", "S1.02", "S1.03", "S1.05", "S1.06", "S2.01", "S2.02", "S2.03", "S2.05", 
     "S3.01", "S3.02", "S3.03", "S4.01", "S4.02", "S4.03", "GS1", "GS2", "GS3", "GS5", "GS6", 
@@ -16,8 +16,8 @@ LIST_TOA = [
     "I1", "I2", "I3", "I4", "I5", "G1", "G2", "G3", "G5", "G6"
 ]
 
-# Danh sách Tầng chuẩn (bao gồm các tầng đặc thù)
-LIST_TANG = [
+# THỨ TỰ TẦNG VẬT LÝ: Để hệ thống hiểu 05A là tầng 4, 12A là tầng 13...
+LIST_TANG_CHIEU_NGHI = [
     "1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", 
     "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", 
     "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"
@@ -39,7 +39,6 @@ def init_connection():
 
 doc = init_connection()
 
-if 'show_phone' not in st.session_state: st.session_state['show_phone'] = {}
 if 'search_results' not in st.session_state: st.session_state['search_results'] = pd.DataFrame()
 if 'view_mode' not in st.session_state: st.session_state['view_mode'] = None
 
@@ -78,32 +77,36 @@ else:
         tab1, tab2 = st.tabs(["🔍 Tìm theo Mã căn", "📂 Lọc nâng cao"])
         
         with tab1:
-            m_input = st.text_input("Nhập mã căn cụ thể (Ví dụ: S1.02-15-05)").strip()
+            m_input = st.text_input("Nhập mã căn cụ thể").strip()
             if st.button("🔍 Tìm nhanh"):
                 st.session_state['search_results'] = df[df['Mã đầy đủ'].str.contains(m_input, case=False, na=False)]
                 st.session_state['view_mode'] = 'single'
 
         with tab2:
-            c1, c2, c3 = st.columns([2, 2, 1])
-            with c1:
-                sel_toas = st.multiselect("Chọn Tòa (có thể chọn nhiều)", LIST_TOA)
-            with c2:
-                # Dùng multiselect cho tầng để xử lý chính xác 05A, 12A...
-                sel_tangs = st.multiselect("Chọn Tầng (có thể chọn nhiều)", LIST_TANG)
-            with c3:
-                # Lấy danh sách trục thực tế từ Sheet
+            c_toa, c_truc = st.columns([1, 1])
+            with c_toa:
+                sel_toas = st.multiselect("Chọn Tòa", LIST_TOA)
+            with c_truc:
                 truc_list = sorted(list(df['Trục'].unique()))
-                sel_trucs = st.multiselect("Chọn Trục", truc_list)
+                sel_trucs = st.multiselect("Chọn Trục căn", truc_list)
+            
+            st.write("**Chọn khoảng tầng:**")
+            start_t, end_t = st.select_slider(
+                'Kéo mút trái và phải để chọn khoảng (Ví dụ: 3 đến 05 sẽ bao gồm cả 05A)',
+                options=LIST_TANG_CHIEU_NGHI,
+                value=("1", "39")
+            )
             
             if st.button("🚀 Bắt đầu lọc dữ liệu"):
                 t_df = df.copy()
-                if sel_toas:
-                    t_df = t_df[t_df['Tòa'].isin(sel_toas)]
-                if sel_tangs:
-                    # Chuyển cả hai về string để so sánh chính xác các tầng có chữ
-                    t_df = t_df[t_df['Tầng'].astype(str).isin(sel_tangs)]
-                if sel_trucs:
-                    t_df = t_df[t_df['Trục'].isin(sel_trucs)]
+                if sel_toas: t_df = t_df[t_df['Tòa'].isin(sel_toas)]
+                if sel_trucs: t_df = t_df[t_df['Trục'].isin(sel_trucs)]
+                
+                # LOGIC LỌC TẦNG THEO THỨ TỰ CHỈ SỐ (INDEX)
+                idx_start = LIST_TANG_CHIEU_NGHI.index(start_t)
+                idx_end = LIST_TANG_CHIEU_NGHI.index(end_t)
+                valid_tangs = LIST_TANG_CHIEU_NGHI[idx_start : idx_end + 1]
+                t_df = t_df[t_df['Tầng'].astype(str).isin(valid_tangs)]
                 
                 st.session_state['search_results'] = t_df
                 st.session_state['view_mode'] = 'table'
@@ -116,18 +119,17 @@ else:
                 for i, r in res.iterrows():
                     with st.container(border=True):
                         st.subheader(f"🏠 {r['Mã đầy đủ']}")
-                        st.write(f"Chủ nhà: {r['Chủ nhà']} | Loại: {r['Loại hình']} | Diện tích: {r['Diện tích']}m2")
+                        st.write(f"Chủ nhà: {r['Chủ nhà']} | Loại: {r['Loại hình']} | DT: {r['Diện tích']}m2")
                         if st.button(f"👁️ Hiện SĐT {r['Mã đầy đủ']}", key=f"s_{r['Mã đầy đủ']}"):
                             st.code(r['Số điện thoại'], language="text")
                             doc.worksheet("LOG_TRUY_CAP").append_row([datetime.now().strftime("%H:%M %d/%m"), st.session_state['user_name'], r['Mã đầy đủ']])
 
             else:
-                # GIAO DIỆN BẢNG GỌN GÀNG
-                st.write(f"Tìm thấy **{len(res)}** kết quả phù hợp.")
+                # BẢNG GỌN GÀNG THEO YÊU CẦU
+                st.write(f"Tìm thấy **{len(res)}** căn hộ từ tầng **{start_t}** đến **{end_t}**.")
                 h = st.columns([1.5, 1.5, 1.5, 1, 1, 1.2])
                 cols_name = ["Mã Căn", "Chủ Nhà", "SĐT", "Loại", "D.Tích", "Trạng Thái"]
-                for col, name in zip(h, cols_name):
-                    col.markdown(f"**{name}**")
+                for col, name in zip(h, cols_name): col.markdown(f"**{name}**")
                 
                 for i, r in res.iterrows():
                     c = st.columns([1.5, 1.5, 1.5, 1, 1, 1.2])
@@ -150,7 +152,7 @@ else:
                     c[5].markdown(f":{color}[{tt}]")
         
         elif st.session_state['view_mode'] is not None:
-            st.info("Không có dữ liệu phù hợp với bộ lọc.")
+            st.info("Không có dữ liệu phù hợp.")
 
     except Exception as e:
         st.error(f"Lỗi: {e}")
