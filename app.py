@@ -23,6 +23,12 @@ def init_connection():
 
 doc = init_connection()
 
+# Khởi tạo trạng thái lưu trữ kết quả lọc để không bị reset khi bấm nút
+if 'search_results' not in st.session_state:
+    st.session_state['search_results'] = pd.DataFrame()
+if 'view_mode' not in st.session_state:
+    st.session_state['view_mode'] = None # 'single' hoặc 'table'
+
 # --- ĐĂNG NHẬP ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -46,93 +52,96 @@ else:
     # --- GIAO DIỆN CHÍNH ---
     st.sidebar.subheader(f"👤 {st.session_state['user_name']}")
     if st.sidebar.button("Đăng xuất"):
-        st.session_state['logged_in'] = False
+        st.session_state.clear()
         st.rerun()
 
     st.title("🏘️ Tra cứu Căn hộ")
 
     try:
-        # 1. Đọc dữ liệu an toàn
         sh_data = doc.worksheet("DATA_CAN_HO")
         raw_data = sh_data.get_all_values()
-        header = raw_data[0]
-        df = pd.DataFrame(raw_data[1:], columns=header)
-        df = df.loc[:, df.columns != ''] # Xóa cột trống
-        
-        # Ép kiểu dữ liệu số để lọc tầng
+        df = pd.DataFrame(raw_data[1:], columns=raw_data[0])
         df['Tầng'] = pd.to_numeric(df['Tầng'], errors='coerce').fillna(0)
 
-        # 2. KHU VỰC BỘ LỌC
-        tab1, tab2 = st.tabs(["🔍 Tìm theo Mã căn", "filters Tìm nâng cao"])
+        # KHU VỰC BỘ LỌC
+        tab1, tab2 = st.tabs(["🔍 Tìm theo Mã căn", "📂 Tìm nâng cao (Xem bảng)"])
         
-        filtered_df = pd.DataFrame() # Mặc định trống
-
         with tab1:
-            ma_can_input = st.text_input("Nhập mã căn cụ thể (Ví dụ: S1.02-15-05)", "").strip()
-            btn_tim_ma = st.button("Tìm theo mã")
-            if btn_tim_ma and ma_can_input:
-                filtered_df = df[df['Mã đầy đủ'].str.contains(ma_can_input, case=False, na=False)]
+            ma_can_input = st.text_input("Nhập mã căn (Ví dụ: S1.02-15-05)").strip()
+            if st.button("Tìm mã cụ thể"):
+                st.session_state['search_results'] = df[df['Mã đầy đủ'].str.contains(ma_can_input, case=False, na=False)]
+                st.session_state['view_mode'] = 'single'
 
         with tab2:
-            col_t1, col_t2, col_t3, col_t4 = st.columns(4)
-            with col_t1:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
                 toa_list = ["Tất cả"] + sorted(list(df['Tòa'].unique()))
                 sel_toa = st.selectbox("Chọn Tòa", toa_list)
-            with col_t2:
-                f_from = st.number_input("Tầng từ", value=int(df['Tầng'].min()), step=1)
-            with col_t3:
-                f_to = st.number_input("Đến tầng", value=int(df['Tầng'].max()), step=1)
-            with col_t4:
+            with col2:
+                f_from = st.number_input("Tầng từ", value=1, step=1)
+            with col3:
+                f_to = st.number_input("Đến tầng", value=50, step=1)
+            with col4:
                 truc_list = sorted(list(df['Trục'].unique()))
                 sel_truc = st.multiselect("Chọn Trục căn", truc_list)
             
-            btn_tim_nc = st.button("Tìm kiếm ngay")
-            
-            if btn_tim_nc:
+            if st.button("Lọc danh sách"):
                 temp_df = df.copy()
                 if sel_toa != "Tất cả":
                     temp_df = temp_df[temp_df['Tòa'] == sel_toa]
                 if sel_truc:
                     temp_df = temp_df[temp_df['Trục'].isin(sel_truc)]
                 temp_df = temp_df[temp_df['Tầng'].between(f_from, f_to)]
-                filtered_df = temp_df
+                st.session_state['search_results'] = temp_df
+                st.session_state['view_mode'] = 'table'
 
-        # 3. HIỂN THỊ KẾT QUẢ
+        # HIỂN THỊ KẾT QUẢ
         st.divider()
-        if not filtered_df.empty:
-            st.success(f"Tìm thấy {len(filtered_df)} căn hộ.")
-            for i, r in filtered_df.iterrows():
-                with st.container(border=True):
-                    c1, c2 = st.columns([3, 1])
-                    with c1:
-                        st.subheader(f"🏠 Mã căn: {r['Mã đầy đủ']}")
-                        # Hiển thị thông tin chi tiết theo yêu cầu
-                        col_info1, col_info2 = st.columns(2)
-                        with col_info1:
-                            st.write(f"**Tòa:** {r['Tòa']} | **Tầng:** {r['Tầng']} | **Trục:** {r['Trục']}")
-                            st.write(f"**Loại hình:** {r['Loại hình']} | **Diện tích:** {r['Diện tích']} m²")
-                        with col_info2:
-                            st.write(f"**Chủ nhà:** {r['Chủ nhà']}")
-                            st.write(f"**Trạng thái:** :blue[{r['Trạng thái']}]")
-                        
-                        sdt_raw = str(r['Số điện thoại'])
-                        st.markdown(f"📞 **SĐT:** `{sdt_raw[:4]}.xxx.xxx` (Bấm nút bên cạnh để xem)")
-                    
-                    with c2:
-                        st.write("") # Căn chỉnh khoảng cách
-                        if st.button(f"Xem số đầy đủ", key=f"btn_{r['Mã đầy đủ']}"):
-                            st.info(f"SĐT chủ nhà: **{sdt_raw}**")
-                            # Ghi Log
-                            try:
-                                sh_log = doc.worksheet("LOG_TRUY_CAP")
-                                now = datetime.now().strftime("%H:%M:%S %d/%m/%Y")
-                                sh_log.append_row([now, st.session_state['user_name'], r['Mã đầy đủ'], "Xem SĐT"])
-                            except:
-                                pass
-        elif (btn_tim_ma or btn_tim_nc):
-            st.warning("Không tìm thấy căn hộ nào phù hợp với yêu cầu lọc.")
-        else:
-            st.info("Vui lòng chọn bộ lọc và bấm nút 'Tìm kiếm' để hiển thị dữ liệu.")
+        res = st.session_state['search_results']
+
+        if not res.empty:
+            if st.session_state['view_mode'] == 'single':
+                # HIỂN THỊ DẠNG Ô (CHO 1 MÃ CĂN)
+                for i, r in res.iterrows():
+                    with st.container(border=True):
+                        c1, c2 = st.columns([3, 1])
+                        with c1:
+                            st.subheader(f"🏠 {r['Mã đầy đủ']}")
+                            st.write(f"**Chủ nhà:** {r['Chủ nhà']} | **Trạng thái:** {r['Trạng thái']}")
+                            st.write(f"**Thông tin:** {r['Loại hình']} - {r['Diện tích']}m2 - Tầng {r['Tầng']}")
+                            st.info(f"📞 SĐT: `{str(r['Số điện thoại'])[:4]}.xxx.xxx`")
+                        with c2:
+                            if st.button(f"Hiện số", key=f"single_{r['Mã đầy đủ']}"):
+                                st.success(f"SĐT: {r['Số điện thoại']}")
+                                # Ghi log
+                                doc.worksheet("LOG_TRUY_CAP").append_row([datetime.now().strftime("%H:%M %d/%m"), st.session_state['user_name'], r['Mã đầy đủ']])
+
+            else:
+                # HIỂN THỊ DẠNG BẢNG NGANG (CHO LỌC NÂNG CAO)
+                # Tạo tiêu đề bảng
+                cols = st.columns([1.5, 0.8, 0.8, 0.8, 1.5, 1.5, 1.2, 1, 1.2])
+                headers = ["Mã Căn", "Tòa", "Tầng", "Trục", "Chủ Nhà", "SĐT", "Loại", "D.Tích", "Xem"]
+                for col, h in zip(cols, headers):
+                    col.write(f"**{h}**")
+                
+                for i, r in res.iterrows():
+                    c = st.columns([1.5, 0.8, 0.8, 0.8, 1.5, 1.5, 1.2, 1, 1.2])
+                    c[0].write(r['Mã đầy đủ'])
+                    c[1].write(r['Tòa'])
+                    c[2].write(str(r['Tầng']))
+                    c[3].write(r['Trục'])
+                    c[4].write(r['Chủ nhà'])
+                    c[5].write(f"{str(r['Số điện thoại'])[:4]}...")
+                    c[6].write(r['Loại hình'])
+                    c[7].write(f"{r['Diện tích']}m2")
+                    if c[8].button("Hiện", key=f"tab_{r['Mã đầy đủ']}"):
+                        st.toast(f"SĐT {r['Mã đầy đủ']}: {r['Số điện thoại']}", icon="📞")
+                        st.sidebar.warning(f"SĐT {r['Mã đầy đủ']}: {r['Số điện thoại']}")
+                        # Ghi log
+                        doc.worksheet("LOG_TRUY_CAP").append_row([datetime.now().strftime("%H:%M %d/%m"), st.session_state['user_name'], r['Mã đầy đủ']])
+        
+        elif st.session_state['view_mode'] is not None:
+            st.warning("Không tìm thấy kết quả phù hợp.")
 
     except Exception as e:
-        st.error(f"Lỗi hiển thị dữ liệu: {e}")
+        st.error(f"Lỗi: {e}")
