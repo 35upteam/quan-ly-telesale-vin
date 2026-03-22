@@ -4,7 +4,7 @@ import gspread
 import time 
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS CHUẨN (KHÔNG ĐỔI) ---
+# --- 1. CẤU HÌNH & CSS KHÔI PHỤC BẢN GIAO DIỆN ƯNG Ý ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -12,16 +12,16 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
     
-    /* Tiêu đề: Tự động xuống dòng và căn giữa chuẩn */
+    /* Tiêu đề: Khôi phục kiểu tự xuống dòng và căn giữa chuẩn trên Mobile */
     .brand-title { 
         font-family: 'Playfair Display', serif; 
         font-size: 32px; font-weight: 800; color: #1a1a1a; 
         margin-bottom: 10px; text-align: center; line-height: 1.2;
-        white-space: normal !important; /* Quan trọng để không bị dạt sang bên */
+        white-space: normal !important; 
     }
     .brand-sub { font-family: 'Playfair Display', serif; font-size: 18px; color: #444; margin-bottom: 30px; text-align: center; }
 
-    /* FIX CÂN ĐỐI TRÊN MOBILE */
+    /* CSS FIX CÂN ĐỐI TRÊN MOBILE (Bản bạn đã ưng) */
     @media (max-width: 768px) {
         [data-testid="column"] { 
             width: 100% !important; 
@@ -31,11 +31,12 @@ st.markdown("""
         .brand-title { font-size: 26px; }
         .main .block-container { padding-top: 2rem !important; }
         
-        /* Bảng dữ liệu cuộn ngang */
+        /* Giữ bảng dữ liệu cuộn ngang để không vỡ layout sau khi vào trong */
         div[data-testid="stHorizontalBlock"] { overflow-x: auto !important; display: flex !important; flex-wrap: nowrap !important; }
         div[data-testid="stHorizontalBlock"] > div { min-width: 130px !important; flex-shrink: 0 !important; }
     }
 
+    /* Các thành phần bổ trợ giao diện */
     .header-right-container { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: -45px; margin-bottom: 25px; width: 100%; }
     .user-greet { font-size: 14px; color: #333; white-space: nowrap; }
     .stButton > button[key="logout_btn"] { background-color: #ff4b4b !important; color: white !important; border: none !important; width: 28px !important; height: 28px !important; border-radius: 4px !important; }
@@ -44,7 +45,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. LOGIC HỆ THỐNG ---
+# --- 2. LOGIC KẾT NỐI & DỮ LIỆU ---
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
@@ -56,7 +57,8 @@ def init_connection():
             creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n").strip()
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
-        return gspread.authorize(creds).open("Data Vin")
+        client = gspread.authorize(creds)
+        return client.open("Data Vin")
     except: return None
 
 doc = init_connection()
@@ -64,8 +66,9 @@ doc = init_connection()
 if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 
-# --- 3. GIAO DIỆN ĐĂNG NHẬP ---
+# --- 3. GIAO DIỆN ĐĂNG NHẬP (CÂN ĐỐI CHUẨN) ---
 if not st.session_state['logged_in']:
+    # Trên Laptop chia 1-1.5-1 để căn giữa, trên Mobile CSS sẽ ép 100% tràn đều
     _, mid_col, _ = st.columns([1, 1.5, 1])
     with mid_col:
         st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
@@ -75,19 +78,27 @@ if not st.session_state['logged_in']:
         p_val = st.text_input("Mật khẩu", type="password").strip()
         
         if st.button("Đăng nhập", use_container_width=True):
-            try:
-                sh_u = doc.worksheet("QUAN_LY_USER")
-                data = sh_u.get_all_values()
-                users_df = pd.DataFrame(data[1:], columns=data[0])
-                auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-                if not auth.empty:
-                    st.session_state['logged_in'] = True
-                    st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
-                    st.rerun()
-                else: st.error("Sai tài khoản hoặc mật khẩu!")
-            except: st.error("Lỗi kết nối!")
+            success = False
+            for attempt in range(3):
+                try:
+                    sh_u = doc.worksheet("QUAN_LY_USER")
+                    data = sh_u.get_all_values()
+                    users_df = pd.DataFrame(data[1:], columns=data[0])
+                    auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
+                    if not auth.empty:
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
+                        success = True
+                        break
+                    else:
+                        st.error("Sai tài khoản hoặc mật khẩu!")
+                        success = True
+                        break
+                except:
+                    if attempt < 2: time.sleep(1); continue
+            if success: st.rerun()
 
-# --- 4. GIAO DIỆN CHÍNH (SAU ĐĂNG NHẬP) ---
+# --- 4. GIAO DIỆN SAU ĐĂNG NHẬP (KHÔI PHỤC ĐẦY ĐỦ) ---
 else:
     st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
     c_greet, c_logout = st.columns([9, 1]) 
