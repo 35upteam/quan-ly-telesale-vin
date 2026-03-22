@@ -4,7 +4,7 @@ import gspread
 import time 
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS (GIỮ NGUYÊN BẢN BẠN ƯNG Ý) ---
+# --- 1. CẤU HÌNH & CSS (GIỮ NGUYÊN BẢN BẠN ƯNG Ý - KHÔNG THAY ĐỔI 1 CĂN CHỈNH NÀO) ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -63,7 +63,7 @@ st.markdown("""
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 10px 0; }
     
-    /* Đảm bảo các nút bấm chính (như Đăng nhập) có màu đỏ đồng bộ */
+    /* Giữ màu đỏ cho nút đăng nhập chính */
     .stButton > button {
         background-color: #ff4b4b !important;
         color: white !important;
@@ -124,12 +124,12 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 3. LOGIC HIỂN THỊ SAU ĐĂNG NHẬP ---
+# --- 3. PHẦN CHỨC NĂNG (SAU KHI ĐĂNG NHẬP) ---
 else:
-    # Header hiển thị lời chào
+    # Header: Xin chào (Dùng đúng class header-right-container của bạn)
     st.markdown(f'<div class="header-right-container"><span class="user-greet">Xin chào <b>{st.session_state["user_name"]}!</b></span></div>', unsafe_allow_html=True)
     
-    # Nút đăng xuất (Logout)
+    # Nút thoát nằm riêng để không phá vỡ dòng xin chào
     _, c_logout = st.columns([9, 1])
     with c_logout:
         if st.button("Thoát", key="logout_btn"):
@@ -139,23 +139,47 @@ else:
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
         raw = sh_data.get_all_values()
-        df_main = pd.DataFrame(raw[1:], columns=raw[0])
+        df_main = pd.DataFrame(raw[1:], columns=raw[0]).applymap(lambda x: str(x).strip())
 
-        # Bộ lọc tìm kiếm
-        t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
-        with t1:
-            m_id = st.text_input("Nhập mã căn hộ...")
-            if st.button("Tìm kiếm"):
-                st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(m_id, case=False)]
+        # Khu vực lọc
+        c1, c2, c3 = st.columns([1, 1, 1])
+        with c1: toa_sel = st.multiselect("Tòa", sorted(df_main['Tòa'].unique()))
+        with c2: tang_sel = st.multiselect("Tầng", LIST_TANG_PHYSICAL)
+        with c3: truc_sel = st.multiselect("Trục", LIST_TRUC)
 
-        with t2:
-            c1, c2, c3 = st.columns(3)
-            with c1: toa = st.multiselect("Tòa", sorted(df_main['Tòa'].unique()))
-            with c2: tang = st.multiselect("Tầng", LIST_TANG_PHYSICAL)
-            with c3: truc = st.multiselect("Trục", LIST_TRUC)
-            if st.button("Áp dụng lọc"):
-                res = df_main.copy()
-                if toa: res = res[res['Tòa'].isin(toa)]
-                if tang: res = res[res['Tầng'].isin(tang)]
-                if truc: res = res[res['Trục'].isin(truc)]
-                st.session_
+        if st.button("Lọc căn hộ", use_container_width=True):
+            res = df_main.copy()
+            if toa_sel: res = res[res['Tòa'].isin(toa_sel)]
+            if tang_sel: res = res[res['Tầng'].isin(tang_sel)]
+            if truc_sel: res = res[res['Trục'].isin(truc_sel)]
+            st.session_state['res_df'] = res
+
+        # Hiển thị danh sách
+        res_df = st.session_state['res_df']
+        if not res_df.empty:
+            st.divider()
+            # Tận dụng st.columns để khớp với CSS overflow-x của bạn
+            h_cols = st.columns([1.5, 1.5, 1, 2, 3, 1])
+            t_names = ["Mã Căn", "Chủ Nhà", "DT", "SĐT", "Ghi chú", "Lưu"]
+            for col, t in zip(h_cols, t_names):
+                col.markdown(f"<div class='header-text'>{t}</div>", unsafe_allow_html=True)
+            
+            for i, r in res_df.iterrows():
+                r_cols = st.columns([1.5, 1.5, 1, 2, 3, 1])
+                r_cols[0].write(f"**{r['Mã đầy đủ']}**")
+                r_cols[1].write(r['Chủ nhà'])
+                r_cols[2].write(f"{r['Diện tích']}m²")
+                r_cols[3].write(r['Số điện thoại'])
+                
+                # Ghi chú & Lưu
+                note_val = r_cols[4].text_input("G", value=r.get('Ghi chú', ''), key=f"n_{i}", label_visibility="collapsed")
+                if r_cols[5].button("💾", key=f"s_{i}"):
+                    try:
+                        cell = sh_data.find(r['Mã đầy đủ'])
+                        sh_data.update_cell(cell.row, raw[0].index('Ghi chú') + 1, note_val)
+                        st.toast("Đã lưu!")
+                    except: st.error("Lỗi!")
+                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error("Vui lòng kiểm tra lại Google Sheets.")
