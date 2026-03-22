@@ -4,7 +4,7 @@ import gspread
 import time 
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS TỐI ƯU CÂN ĐỐI MÀN HÌNH (GIỮ NGUYÊN BẢN BẠN GỬI) ---
+# --- 1. CẤU HÌNH & CSS TỐI ƯU CÂN ĐỐI MÀN HÌNH (GIỮ NGUYÊN BẢN GỐC CỦA BẠN) ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -45,10 +45,6 @@ st.markdown("""
 
         /* Tiêu đề thu nhỏ một chút cho vừa màn hình dọc */
         .brand-title { font-size: 26px; white-space: normal !important; }
-        
-        /* Bổ sung để bảng dữ liệu bên trong không bị vỡ layout trên mobile */
-        div[data-testid="stHorizontalBlock"] { overflow-x: auto !important; display: flex !important; flex-wrap: nowrap !important; }
-        div[data-testid="stHorizontalBlock"] > div { min-width: 130px !important; flex-shrink: 0 !important; }
     }
 
     /* Header sau khi đăng nhập */
@@ -66,7 +62,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. KẾT NỐI & DỮ LIỆU ---
 @st.cache_resource
 def init_connection():
     try:
@@ -84,11 +79,11 @@ doc = init_connection()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 
-# Cấu hình bộ lọc
+# Cấu hình dữ liệu
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
-# --- 3. GIAO DIỆN ĐĂNG NHẬP (GIỮ NGUYÊN BẢN BẠN GỬI) ---
+# --- 2. ĐĂNG NHẬP CÂN ĐỐI (GIỮ NGUYÊN TỪNG DÒNG CỦA BẠN) ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.5, 1]) 
     with mid_col:
@@ -121,9 +116,8 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 4. GIAO DIỆN CHỨC NĂNG (NỐI TIẾP VÀO) ---
+# --- 3. PHẦN CHỨC NĂNG (CHỈ CHẠY KHI ĐÃ ĐĂNG NHẬP) ---
 else:
-    # Header & Logout
     st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
     c_greet, c_logout = st.columns([9, 1]) 
     with c_greet:
@@ -135,51 +129,43 @@ else:
     st.markdown('</div>', unsafe_allow_html=True)
 
     try:
-        # Load dữ liệu chính
         sh_data = doc.worksheet("DATA_CAN_HO")
         raw = sh_data.get_all_values()
         h_names = raw[0]
         df_main = pd.DataFrame(raw[1:], columns=h_names).applymap(lambda x: str(x).strip() if x else "")
 
-        # Tabs
-        tab1, tab2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
-
-        with tab1:
-            c_in, c_btn, _ = st.columns([2, 0.8, 3])
-            with c_in: search_ma = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
-            with c_btn:
-                if st.button("Tìm", key="f_btn"):
-                    if search_ma:
-                        st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(search_ma.strip(), case=False)]
+        t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
+        with t1:
+            ci, cb, _ = st.columns([2, 0.8, 3])
+            with ci: m = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
+            with cb:
+                if st.button("Tìm", key="f_b"):
+                    if m:
+                        st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(m.strip(), case=False)]
                         st.rerun()
-
-        with tab2:
+        with t2:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-            with c1: 
-                ds_toa = sorted([t for t in df_main['Tòa'].unique() if t])
-                sel_t = st.multiselect("Tòa", ds_toa)
-            with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
-            with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
-            with c4: sel_tr = st.multiselect("Trục", LIST_TRUC)
-            
-            if st.button("🚀 Thực hiện lọc", key="l_btn"):
-                t_df = df_main.copy()
-                if sel_t: t_df = t_df[t_df['Tòa'].isin(sel_t)]
-                if sel_tr:
-                    t_df['Trục_Clean'] = t_df['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
-                    t_df = t_df[t_df['Trục_Clean'].isin(sel_tr)]
-                idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
-                t_df = t_df[t_df['Tầng'].isin(LIST_TANG_PHYSICAL[idx_s : idx_e + 1])]
-                st.session_state['res_df'] = t_df
+            with c1: st_toa = st.multiselect("Tòa", sorted([t for t in df_main['Tòa'].unique() if t]))
+            with c2: fs = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
+            with c3: fe = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
+            with c4: str_tr = st.multiselect("Trục", LIST_TRUC)
+            if st.button("🚀 Lọc", key="l_b"):
+                tdf = df_main.copy()
+                if st_toa: tdf = tdf[tdf['Tòa'].isin(st_toa)]
+                if str_tr:
+                    tdf['Trục_C'] = tdf['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
+                    tdf = tdf[tdf['Trục_C'].isin(str_tr)]
+                idx_s, idx_e = LIST_TANG_PHYSICAL.index(fs), LIST_TANG_PHYSICAL.index(fe)
+                tdf = tdf[tdf['Tầng'].isin(LIST_TANG_PHYSICAL[idx_s:idx_e+1])]
+                st.session_state['res_df'] = tdf
                 st.rerun()
 
-        # Hiển thị kết quả
         res = st.session_state['res_df']
         if not res.empty:
             st.divider()
             cols = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
-            for cl, txt in zip(cols, ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]):
-                cl.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
+            for cl, tx in zip(cols, ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]):
+                cl.markdown(f"<div class='header-text'>{tx}</div>", unsafe_allow_html=True)
             for i, r in res.iterrows():
                 row = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
                 row[0].write(f"**{r['Mã đầy đủ']}**")
