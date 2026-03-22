@@ -4,60 +4,51 @@ import gspread
 import time
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS ĐÁP ỨNG (RESPONSIVE) ---
-st.set_page_config(page_title="Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
+# --- 1. CẤU HÌNH & CSS ĐÁP ỨNG ---
+st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
-
-    /* Header sát phải tuyệt đối */
+    
+    /* Header sát phải trên Laptop & Mobile */
     .header-right-container {
         display: flex; justify-content: flex-end; align-items: center;
-        gap: 8px; margin-top: -50px; margin-bottom: 15px;
+        gap: 10px; margin-top: -45px; margin-bottom: 25px; width: 100%;
+    }
+    .user-greet { font-size: 15px; color: #333; white-space: nowrap; }
+    .stButton > button[key="logout_btn"] {
+        background-color: #ff4b4b !important; color: white !important; border: none !important;
+        width: 28px !important; height: 28px !important; border-radius: 4px !important;
+        display: flex !important; align-items: center !important; justify-content: center !important;
     }
 
-    /* Hệ thống lưới (Grid) tự động chia cột */
-    .main-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-        gap: 15px;
-    }
-
-    /* Thiết kế thẻ (Card) */
-    .apartment-card {
-        background-color: #ffffff;
-        border: 1px solid #e1e4e8;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
+    /* Định dạng bảng cho Laptop */
+    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 14px; }
+    .row-divider { border-bottom: 1px solid #ebedef; padding: 12px 0; }
     
-    .card-title { color: #1a73e8; font-size: 17px; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-    .card-info { font-size: 14px; color: #444; line-height: 1.5; margin-bottom: 10px; }
-    .card-label { font-weight: 600; color: #202124; width: 80px; display: inline-block; }
-
-    /* Nút bấm */
-    .stButton button { border-radius: 6px; font-weight: 600; }
-    .logout-btn-style button { width: 30px !important; height: 30px !important; background-color: #ff4b4b !important; color: white !important; border: none !important; }
-    .error-msg { color: #ff4b4b; font-size: 13px; font-weight: bold; margin-top: 5px; }
-    
-    /* Ẩn bớt padding thừa của Streamlit trên mobile */
-    @media (max-width: 640px) {
-        .main-grid { grid-template-columns: 1fr; }
-        .stApp { padding: 0px; }
+    /* Giao diện Card CHỈ HIỆN TRÊN MOBILE (dưới 768px) */
+    @media (max-width: 768px) {
+        .laptop-view { display: none !important; }
+        .mobile-card {
+            background: white; border: 1px solid #eee; border-radius: 10px;
+            padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
     }
+    @media (min-width: 769px) {
+        .mobile-view { display: none !important; }
+    }
+
+    .brand-title { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 800; color: #1a1a1a; margin-bottom: 5px; text-align: center; }
+    .brand-sub { font-family: 'Playfair Display', serif; font-size: 18px; color: #444; margin-bottom: 30px; text-align: center; }
+    .error-msg { color: #ff4b4b; font-size: 13px; margin-top: 5px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. TỐI ƯU TỐC ĐỘ: CACHING ---
+# --- 2. KẾT NỐI & CACHE ---
 @st.cache_resource
-def get_gspread_client():
+def get_client():
     creds_info = dict(st.secrets["gcp_service_account"])
     if "private_key" in creds_info:
         creds_info["private_key"] = creds_info["private_key"].replace("\\n", "\n").strip()
@@ -65,110 +56,115 @@ def get_gspread_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
     return gspread.authorize(creds)
 
-@st.cache_data(ttl=300)
-def load_full_data(sheet_name):
+@st.cache_data(ttl=600)
+def load_data(sheet_name):
     try:
-        client = get_gspread_client()
-        doc = client.open("Data Vin")
-        sh = doc.worksheet(sheet_name)
+        client = get_client()
+        sh = client.open("Data Vin").worksheet(sheet_name)
         data = sh.get_all_values()
-        df = pd.DataFrame(data[1:], columns=data[0])
-        return df.applymap(lambda x: str(x).strip() if x else "")
-    except:
-        return pd.DataFrame()
+        return pd.DataFrame(data[1:], columns=data[0]).applymap(lambda x: str(x).strip() if x else "")
+    except: return pd.DataFrame()
 
-# --- 3. LOGIC APP ---
+# --- 3. LOGIC CHÍNH ---
 if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'search_error' not in st.session_state: st.session_state['search_error'] = ""
 
 if not st.session_state['logged_in']:
-    _, mid, _ = st.columns([1, 1.5, 1])
-    with mid:
-        st.markdown("<h2 style='text-align: center;'>Hệ thống Giỏ hàng</h2>", unsafe_allow_html=True)
-        u = st.text_input("Tài khoản")
-        p = st.text_input("Mật khẩu", type="password")
+    _, mid_col, _ = st.columns([1, 1.2, 1])
+    with mid_col:
+        st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='brand-title'>Data Vinhomes Smart City</div>", unsafe_allow_html=True)
+        st.markdown("<div class='brand-sub'>Liên hệ Admin Ninh - 0912.791.925</div>", unsafe_allow_html=True)
+        u = st.text_input("Tài khoản").strip()
+        p = st.text_input("Mật khẩu", type="password").strip()
         if st.button("Đăng nhập"):
-            users_df = load_full_data("QUAN_LY_USER")
-            auth = users_df[(users_df['Username'] == u) & (users_df['Password'] == p)]
+            users = load_data("QUAN_LY_USER")
+            auth = users[(users['Username'] == u) & (users['Password'] == p)]
             if not auth.empty:
                 st.session_state['logged_in'] = True
                 st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
                 st.rerun()
-            else: st.error("Sai tài khoản/mật khẩu")
+            else: st.error("Sai tài khoản hoặc mật khẩu!")
 else:
     # Header sát phải
-    st.markdown(f'''<div class="header-right-container">
-        <span class="user-greet">Chào <b>{st.session_state["user_name"]}</b></span>
-        <div class="logout-btn-style">''', unsafe_allow_html=True)
-    if st.button("❌", key="logout_btn"):
-        st.session_state.clear()
-        st.rerun()
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
+    c_g, c_l = st.columns([9, 1])
+    with c_g: st.markdown(f'<div class="user-greet" style="text-align: right; padding-top: 5px;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
+    with c_l: 
+        if st.button("❌", key="logout_btn"): 
+            st.session_state.clear()
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Nút làm mới dữ liệu nhanh
-    if st.button("🔄 Làm mới dữ liệu", help="Cập nhật lại từ Google Sheets ngay lập tức"):
+    if st.button("🔄 Làm mới dữ liệu"):
         st.cache_data.clear()
         st.rerun()
 
-    df_main = load_full_data("DATA_CAN_HO")
-
+    df_main = load_data("DATA_CAN_HO")
     t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
-    
+
     with t1:
-        c_in, c_btn = st.columns([3, 1])
-        search_ma = c_in.text_input("Mã căn", placeholder="S1.01.10.20", label_visibility="collapsed")
-        if c_btn.button("TÌM KIẾM"):
-            if search_ma:
-                res = df_main[df_main['Mã đầy đủ'].str.contains(search_ma, case=False)]
-                if res.empty:
-                    st.session_state['search_error'] = f"Không thấy mã: {search_ma}"
-                    st.session_state['res_df'] = pd.DataFrame()
-                else:
-                    st.session_state['search_error'] = ""
-                    st.session_state['res_df'] = res
-                st.rerun()
+        c_in, c_btn, _ = st.columns([2, 0.8, 3])
+        search_ma = c_in.text_input("Mã căn", key="input_ma", label_visibility="collapsed", placeholder="Nhập mã căn...")
         if st.session_state['search_error']:
             st.markdown(f"<div class='error-msg'>⚠️ {st.session_state['search_error']}</div>", unsafe_allow_html=True)
+        if c_btn.button("Tìm kiếm"):
+            res = df_main[df_main['Mã đầy đủ'].str.contains(search_ma, case=False)] if search_ma else pd.DataFrame()
+            if res.empty and search_ma:
+                st.session_state['search_error'] = f"Mã '{search_ma}' không tồn tại."
+                st.session_state['res_df'] = pd.DataFrame()
+            else:
+                st.session_state['search_error'] = ""
+                st.session_state['res_df'] = res
+            st.rerun()
 
-    # --- HIỂN THỊ ĐÁP ỨNG (GRID CARD) ---
-    res_display = st.session_state['res_df']
-    if not res_display.empty:
-        st.write(f"Tìm thấy **{len(res_display)}** căn")
+    # --- HIỂN THỊ KẾT QUẢ ---
+    res = st.session_state['res_df']
+    if not res.empty:
+        st.divider()
         
-        # Bắt đầu container Grid
-        st.markdown('<div class="main-grid">', unsafe_allow_html=True)
+        # --- BẢN LAPTOP (DẠNG BẢNG) ---
+        st.markdown('<div class="laptop-view">', unsafe_allow_html=True)
+        cols = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
+        titles = ["Mã Căn", "Chủ Nhà", "Loại hình", "DT", "SĐT", "Ghi chú", "Lưu"]
+        for col, title in zip(cols, titles): col.markdown(f"<div class='header-text'>{title}</div>", unsafe_allow_html=True)
         
-        # Vì Streamlit không cho lồng button vào HTML trực tiếp dễ dàng, 
-        # ta dùng layout columns bên trong Grid của Streamlit
-        for i, r in res_display.iterrows():
-            with st.container():
-                # Vẽ Card bằng HTML
-                st.markdown(f"""
-                <div class="apartment-card">
-                    <div class="card-title">🏢 {r['Mã đầy đủ']}</div>
-                    <div class="card-info">
-                        <span class="card-label">Chủ nhà:</span> {r['Chủ nhà']}<br>
-                        <span class="card-label">Diện tích:</span> {r['Diện tích']}m²<br>
-                        <span class="card-label">Loại:</span> {r.get('Loại hình','-')}
-                    </div>
+        for i, r in res.iterrows():
+            row = st.columns([1, 1, 0.8, 0.6, 1.4, 2.2, 0.5])
+            row[0].write(f"**{r['Mã đầy đủ']}**")
+            row[1].write(r['Chủ nhà'])
+            row[2].write(r.get('Loại hình','-'))
+            row[3].write(f"{r['Diện tích']}m²")
+            s_key = f"v_{r['Mã đầy đủ']}"
+            if st.session_state.get(s_key): row[4].code(r['Số điện thoại'])
+            elif row[4].button("👁️ Xem", key=f"lp_v_{i}"): 
+                st.session_state[s_key] = True
+                st.rerun()
+            n_val = row[5].text_input("G", value=r.get('Ghi chú',''), key=f"lp_n_{i}", label_visibility="collapsed")
+            if row[6].button("💾", key=f"lp_s_{i}"): st.toast("Đã lưu!")
+            st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # --- BẢN MOBILE (DẠNG THẺ) ---
+        st.markdown('<div class="mobile-view">', unsafe_allow_html=True)
+        for i, r in res.iterrows():
+            st.markdown(f"""
+            <div class="mobile-card">
+                <div style="color:#1a73e8; font-weight:bold; font-size:16px;">🏢 {r['Mã đầy đủ']}</div>
+                <div style="font-size:14px; margin-top:5px;">
+                    <b>Chủ:</b> {r['Chủ nhà']} | <b>DT:</b> {r['Diện tích']}m²<br>
+                    <b>Loại:</b> {r.get('Loại hình','-')}
                 </div>
-                """, unsafe_allow_html=True)
-                
-                # Nút chức năng (SĐT và Ghi chú)
-                c1, c2 = st.columns([1, 1])
-                s_key = f"v_{r['Mã đầy đủ']}"
-                if st.session_state.get(s_key):
-                    c1.code(r['Số điện thoại'])
-                else:
-                    if c1.button(f"📞 Xem SĐT", key=f"b_{i}"):
-                        st.session_state[s_key] = True
-                        st.rerun()
-                
-                # Ghi chú & Lưu
-                note = c2.text_input("Note", value=r.get('Ghi chú',''), key=f"n_{i}", label_visibility="collapsed")
-                if c2.button("💾 Lưu", key=f"s_{i}"):
-                    # Logic lưu vào Google Sheets ở đây
-                    st.toast("Đã lưu ghi chú!")
-        
+            </div>
+            """, unsafe_allow_html=True)
+            mc1, mc2 = st.columns(2)
+            s_key = f"v_{r['Mã đầy đủ']}"
+            if st.session_state.get(s_key): mc1.code(r['Số điện thoại'])
+            elif mc1.button("📞 Xem SĐT", key=f"mb_v_{i}"): 
+                st.session_state[s_key] = True
+                st.rerun()
+            n_mb = mc2.text_input("Ghi chú", value=r.get('Ghi chú',''), key=f"mb_n_{i}", label_visibility="collapsed")
+            if mc2.button("💾 Lưu", key=f"mb_s_{i}"): st.toast("Lưu xong!")
+            st.divider()
         st.markdown('</div>', unsafe_allow_html=True)
