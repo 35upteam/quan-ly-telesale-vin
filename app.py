@@ -63,7 +63,7 @@ st.markdown("""
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 10px 0; }
     
-    /* Đảm bảo nút đăng nhập của bạn luôn là màu đỏ */
+    /* Đảm bảo các nút bấm chính (như Đăng nhập) có màu đỏ đồng bộ */
     .stButton > button {
         background-color: #ff4b4b !important;
         color: white !important;
@@ -124,54 +124,38 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 3. HIỂN THỊ DỮ LIỆU ---
+# --- 3. LOGIC HIỂN THỊ SAU ĐĂNG NHẬP ---
 else:
-    # Header hiển thị tên và nút thoát
+    # Header hiển thị lời chào
     st.markdown(f'<div class="header-right-container"><span class="user-greet">Xin chào <b>{st.session_state["user_name"]}!</b></span></div>', unsafe_allow_html=True)
-    _, c_out = st.columns([9, 1])
-    with c_out:
+    
+    # Nút đăng xuất (Logout)
+    _, c_logout = st.columns([9, 1])
+    with c_logout:
         if st.button("Thoát", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
 
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
-        raw_vals = sh_data.get_all_values()
-        df_main = pd.DataFrame(raw_vals[1:], columns=raw_vals[0])
+        raw = sh_data.get_all_values()
+        df_main = pd.DataFrame(raw[1:], columns=raw[0])
 
-        # Bộ lọc
-        c1, c2, c3 = st.columns([1, 1, 1])
-        with c1: f_toa = st.multiselect("Tòa", sorted(df_main['Tòa'].unique()))
-        with c2: f_tang = st.multiselect("Tầng", LIST_TANG_PHYSICAL)
-        with c3: f_truc = st.multiselect("Trục", LIST_TRUC)
+        # Bộ lọc tìm kiếm
+        t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
+        with t1:
+            m_id = st.text_input("Nhập mã căn hộ...")
+            if st.button("Tìm kiếm"):
+                st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(m_id, case=False)]
 
-        if st.button("Lọc dữ liệu"):
-            temp_df = df_main.copy()
-            if f_toa: temp_df = temp_df[temp_df['Tòa'].isin(f_toa)]
-            if f_tang: temp_df = temp_df[temp_df['Tầng'].isin(f_tang)]
-            if f_truc: temp_df = temp_df[temp_df['Trục'].isin(f_truc)]
-            st.session_state['res_df'] = temp_df
-
-        # Hiển thị kết quả (Tự động cuộn ngang trên mobile nhờ CSS của bạn)
-        res = st.session_state['res_df']
-        if not res.empty:
-            st.divider()
-            cols = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
-            headers = ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]
-            for col, h in zip(cols, headers):
-                col.markdown(f"<div class='header-text'>{h}</div>", unsafe_allow_html=True)
-            
-            for i, r in res.iterrows():
-                row = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
-                row[0].write(r['Mã đầy đủ'])
-                row[1].write(r['Chủ nhà'])
-                row[2].write(r.get('Loại hình', ''))
-                row[3].write(r['Diện tích'])
-                row[4].write(r['Số điện thoại'])
-                note = row[5].text_input("Ghi chú", value=r.get('Ghi chú', ''), key=f"n_{i}", label_visibility="collapsed")
-                if row[6].button("💾", key=f"s_{i}"):
-                    # Logic lưu ghi chú vào Google Sheets
-                    pass
-                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
-    except:
-        st.warning("Đang kết nối dữ liệu...")
+        with t2:
+            c1, c2, c3 = st.columns(3)
+            with c1: toa = st.multiselect("Tòa", sorted(df_main['Tòa'].unique()))
+            with c2: tang = st.multiselect("Tầng", LIST_TANG_PHYSICAL)
+            with c3: truc = st.multiselect("Trục", LIST_TRUC)
+            if st.button("Áp dụng lọc"):
+                res = df_main.copy()
+                if toa: res = res[res['Tòa'].isin(toa)]
+                if tang: res = res[res['Tầng'].isin(tang)]
+                if truc: res = res[res['Trục'].isin(truc)]
+                st.session_
