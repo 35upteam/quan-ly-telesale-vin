@@ -4,7 +4,7 @@ import gspread
 import time 
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS TỐI ƯU CÂN ĐỐI MÀN HÌNH (GIỮ NGUYÊN BẢN GỐC CỦA BẠN) ---
+# --- 1. CẤU HÌNH & CSS (GIỮ NGUYÊN BẢN GỐC & FIX HEADER/TABLE) ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -12,7 +12,6 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
     [data-testid="stSidebar"] { display: none; }
     
-    /* Tiêu đề: Căn giữa và cho phép xuống dòng tự nhiên trên mobile */
     .brand-title { 
         font-family: 'Playfair Display', serif; 
         font-size: 32px; 
@@ -30,34 +29,59 @@ st.markdown("""
 
     /* FIX CÂN ĐỐI TRÊN MOBILE */
     @media (max-width: 768px) {
-        /* Bỏ chia cột, cho form rộng 90% màn hình và căn giữa */
         [data-testid="column"] {
             width: 100% !important;
             flex: 1 1 100% !important;
             padding: 0 10px !important;
         }
-        
-        /* Căn chỉnh lại khoảng cách lề cho đẹp */
         .main .block-container {
             padding-left: 1rem !important;
             padding-right: 1rem !important;
         }
-
-        /* Tiêu đề thu nhỏ một chút cho vừa màn hình dọc */
         .brand-title { font-size: 26px; white-space: normal !important; }
+
+        /* HỖ TRỢ CUỘN NGANG CHO BẢNG DỮ LIỆU TRÊN ĐIỆN THOẠI */
+        .stHorizontalBlock {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            padding-bottom: 5px;
+        }
+        .stHorizontalBlock > div {
+            min-width: 120px !important; /* Đảm bảo các cột không bị bóp nghẹt */
+            flex-shrink: 0 !important;
+        }
+        
+        /* Chỉnh lại Header sau khi đăng nhập cho mobile */
+        .header-right-container {
+            margin-top: -20px !important; 
+            margin-bottom: 10px !important;
+        }
     }
 
-    /* Header sau khi đăng nhập */
+    /* Header sau khi đăng nhập: Đưa nút logout ngang hàng */
     .header-right-container {
-        display: flex; justify-content: flex-end; align-items: center;
-        gap: 8px; margin-top: -45px; margin-bottom: 25px; width: 100%;
+        display: flex; 
+        justify-content: flex-end; 
+        align-items: center;
+        gap: 10px; 
+        margin-top: -45px; 
+        margin-bottom: 25px; 
+        width: 100%;
     }
-    .user-greet { font-size: 14px; color: #333; white-space: nowrap; }
+    .user-greet { font-size: 14px; color: #333; font-weight: 500; }
+    
     .stButton > button[key="logout_btn"] {
-        background-color: #ff4b4b !important; color: white !important; border: none !important;
-        width: 28px !important; height: 28px !important; border-radius: 4px !important;
+        background-color: #ff4b4b !important; 
+        color: white !important; 
+        border: none !important;
+        padding: 0px 8px !important;
+        height: 28px !important; 
+        border-radius: 4px !important;
+        line-height: 28px !important;
     }
-    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; }
+    
+    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; white-space: nowrap; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 10px 0; }
     </style>
     """, unsafe_allow_html=True)
@@ -79,11 +103,10 @@ doc = init_connection()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 
-# Cấu hình dữ liệu
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
-# --- 2. ĐĂNG NHẬP CÂN ĐỐI (GIỮ NGUYÊN TỪNG DÒNG CỦA BẠN) ---
+# --- 2. ĐĂNG NHẬP (GIỮ NGUYÊN BẢN BẠN ƯNG Ý) ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.5, 1]) 
     with mid_col:
@@ -102,7 +125,6 @@ if not st.session_state['logged_in']:
                     data = sh_u.get_all_values()
                     users_df = pd.DataFrame(data[1:], columns=data[0])
                     auth = users_df[(users_df['Username'].astype(str) == u_val) & (users_df['Password'].astype(str) == p_val)]
-                    
                     if not auth.empty:
                         st.session_state['logged_in'] = True
                         st.session_state['user_name'] = auth.iloc[0]['Tên nhân viên']
@@ -116,14 +138,15 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 3. PHẦN CHỨC NĂNG (CHỈ CHẠY KHI ĐÃ ĐĂNG NHẬP) ---
+# --- 3. PHẦN HIỂN THỊ SAU ĐĂNG NHẬP ---
 else:
+    # Header: Xin chào + Nút Đăng xuất ngang hàng
     st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
-    c_greet, c_logout = st.columns([9, 1]) 
-    with c_greet:
-        st.markdown(f'<div class="user-greet" style="text-align: right; padding-top: 5px;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
-    with c_logout:
-        if st.button("❌", key="logout_btn"):
+    c_left, c_right = st.columns([8, 2])
+    with c_left:
+        st.markdown(f'<div class="user-greet" style="text-align: right;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
+    with c_right:
+        if st.button("Đăng xuất", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -136,7 +159,7 @@ else:
 
         t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
         with t1:
-            ci, cb, _ = st.columns([2, 0.8, 3])
+            ci, cb, _ = st.columns([2, 1, 3])
             with ci: m = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
             with cb:
                 if st.button("Tìm", key="f_b"):
@@ -145,13 +168,13 @@ else:
                         st.rerun()
         with t2:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-            with c1: st_toa = st.multiselect("Tòa", sorted([t for t in df_main['Tòa'].unique() if t]))
+            with c1: ds_toa = st.multiselect("Tòa", sorted([t for t in df_main['Tòa'].unique() if t]))
             with c2: fs = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
             with c3: fe = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
             with c4: str_tr = st.multiselect("Trục", LIST_TRUC)
             if st.button("🚀 Lọc", key="l_b"):
                 tdf = df_main.copy()
-                if st_toa: tdf = tdf[tdf['Tòa'].isin(st_toa)]
+                if ds_toa: tdf = tdf[tdf['Tòa'].isin(ds_toa)]
                 if str_tr:
                     tdf['Trục_C'] = tdf['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
                     tdf = tdf[tdf['Trục_C'].isin(str_tr)]
@@ -163,20 +186,27 @@ else:
         res = st.session_state['res_df']
         if not res.empty:
             st.divider()
-            cols = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
-            for cl, tx in zip(cols, ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]):
-                cl.markdown(f"<div class='header-text'>{tx}</div>", unsafe_allow_html=True)
+            # Dòng tiêu đề bảng
+            h_cols = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
+            titles = ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]
+            for col, title in zip(h_cols, titles):
+                col.markdown(f"<div class='header-text'>{title}</div>", unsafe_allow_html=True)
+            
+            # Dòng dữ liệu
             for i, r in res.iterrows():
-                row = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
+                row = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
                 row[0].write(f"**{r['Mã đầy đủ']}**")
                 row[1].write(r['Chủ nhà'])
                 row[2].write(r.get('Loại hình', '-'))
                 row[3].write(f"{r['Diện tích']}m²")
+                
                 sk = f"v_{r['Mã đầy đủ']}"
-                if st.session_state.get(sk): row[4].code(r['Số điện thoại'], language="text")
+                if st.session_state.get(sk): 
+                    row[4].code(r['Số điện thoại'], language="text")
                 elif row[4].button("👁️", key=f"b_{i}"):
                     st.session_state[sk] = True
                     st.rerun()
+                
                 gv = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"i_{i}", label_visibility="collapsed")
                 if row[6].button("💾", key=f"s_{i}"):
                     try:
