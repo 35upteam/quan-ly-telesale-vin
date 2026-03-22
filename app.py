@@ -4,7 +4,7 @@ import gspread
 import time 
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 1. CẤU HÌNH & CSS (GIỮ NGUYÊN BẢN GỐC & FIX HEADER/TABLE) ---
+# --- 1. CẤU HÌNH & CSS (GIỮ NGUYÊN 100% BẢN GỐC CỦA BẠN) ---
 st.set_page_config(page_title="Quản lý Giỏ hàng Vin", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -27,7 +27,6 @@ st.markdown("""
         text-align: center; 
     }
 
-    /* FIX CÂN ĐỐI TRÊN MOBILE */
     @media (max-width: 768px) {
         [data-testid="column"] {
             width: 100% !important;
@@ -39,49 +38,34 @@ st.markdown("""
             padding-right: 1rem !important;
         }
         .brand-title { font-size: 26px; white-space: normal !important; }
-
-        /* HỖ TRỢ CUỘN NGANG CHO BẢNG DỮ LIỆU TRÊN ĐIỆN THOẠI */
-        .stHorizontalBlock {
+        
+        /* CSS CHỈ DÀNH CHO BẢNG DỮ LIỆU (KHÔNG ẢNH HƯỞNG ĐĂNG NHẬP) */
+        .mobile-table {
             display: flex !important;
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
-            padding-bottom: 5px;
+            -webkit-overflow-scrolling: touch;
         }
-        .stHorizontalBlock > div {
-            min-width: 120px !important; /* Đảm bảo các cột không bị bóp nghẹt */
+        .mobile-table > div {
+            min-width: 130px !important;
             flex-shrink: 0 !important;
-        }
-        
-        /* Chỉnh lại Header sau khi đăng nhập cho mobile */
-        .header-right-container {
-            margin-top: -20px !important; 
-            margin-bottom: 10px !important;
         }
     }
 
-    /* Header sau khi đăng nhập: Đưa nút logout ngang hàng */
-    .header-right-container {
-        display: flex; 
-        justify-content: flex-end; 
+    /* Header sau khi đăng nhập */
+    .header-flex {
+        display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 10px; 
-        margin-top: -45px; 
-        margin-bottom: 25px; 
-        width: 100%;
+        margin-top: -45px;
+        margin-bottom: 25px;
     }
-    .user-greet { font-size: 14px; color: #333; font-weight: 500; }
-    
+    .user-greet { font-size: 14px; color: #333; white-space: nowrap; }
     .stButton > button[key="logout_btn"] {
-        background-color: #ff4b4b !important; 
-        color: white !important; 
-        border: none !important;
-        padding: 0px 8px !important;
-        height: 28px !important; 
-        border-radius: 4px !important;
-        line-height: 28px !important;
+        background-color: #ff4b4b !important; color: white !important; border: none !important;
+        padding: 0 10px !important; height: 28px !important; border-radius: 4px !important;
     }
-    
-    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; white-space: nowrap; }
+    .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 10px 0; }
     </style>
     """, unsafe_allow_html=True)
@@ -106,7 +90,7 @@ if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
-# --- 2. ĐĂNG NHẬP (GIỮ NGUYÊN BẢN BẠN ƯNG Ý) ---
+# --- 2. ĐĂNG NHẬP (GIỮ NGUYÊN BẢN GỐC 100%) ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.5, 1]) 
     with mid_col:
@@ -138,18 +122,24 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 3. PHẦN HIỂN THỊ SAU ĐĂNG NHẬP ---
+# --- 3. CHỨC NĂNG SAU ĐĂNG NHẬP ---
 else:
-    # Header: Xin chào + Nút Đăng xuất ngang hàng
-    st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
-    c_left, c_right = st.columns([8, 2])
-    with c_left:
-        st.markdown(f'<div class="user-greet" style="text-align: right;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
-    with c_right:
+    # Nút đỏ ngang hàng dòng xin chào
+    st.markdown(f"""
+        <div class="header-flex">
+            <div></div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="user-greet">Xin chào <b>{st.session_state["user_name"]}!</b></span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Nút Logout thực tế (vị trí trùng với div trên)
+    _, c_logout = st.columns([8.5, 1.5])
+    with c_logout:
         if st.button("Đăng xuất", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
     try:
         sh_data = doc.worksheet("DATA_CAN_HO")
@@ -160,7 +150,7 @@ else:
         t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
         with t1:
             ci, cb, _ = st.columns([2, 1, 3])
-            with ci: m = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
+            with ci: m = st.text_input("Mã", label_visibility="collapsed", placeholder="Mã căn...")
             with cb:
                 if st.button("Tìm", key="f_b"):
                     if m:
@@ -168,13 +158,13 @@ else:
                         st.rerun()
         with t2:
             c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-            with c1: ds_toa = st.multiselect("Tòa", sorted([t for t in df_main['Tòa'].unique() if t]))
-            with c2: fs = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
-            with c3: fe = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
+            with c1: st_toa = st.multiselect("Tòa", sorted([t for t in df_main['Tòa'].unique() if t]))
+            with c2: fs = st.selectbox("Từ", LIST_TANG_PHYSICAL, index=4)
+            with c3: fe = st.selectbox("Đến", LIST_TANG_PHYSICAL, index=15)
             with c4: str_tr = st.multiselect("Trục", LIST_TRUC)
             if st.button("🚀 Lọc", key="l_b"):
                 tdf = df_main.copy()
-                if ds_toa: tdf = tdf[tdf['Tòa'].isin(ds_toa)]
+                if st_toa: tdf = tdf[tdf['Tòa'].isin(st_toa)]
                 if str_tr:
                     tdf['Trục_C'] = tdf['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
                     tdf = tdf[tdf['Trục_C'].isin(str_tr)]
@@ -186,7 +176,10 @@ else:
         res = st.session_state['res_df']
         if not res.empty:
             st.divider()
-            # Dòng tiêu đề bảng
+            # Bọc toàn bộ bảng vào div 'mobile-table' để cuộn ngang trên điện thoại
+            st.markdown('<div class="mobile-table">', unsafe_allow_html=True)
+            
+            # Header bảng
             h_cols = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
             titles = ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]
             for col, title in zip(h_cols, titles):
@@ -199,14 +192,11 @@ else:
                 row[1].write(r['Chủ nhà'])
                 row[2].write(r.get('Loại hình', '-'))
                 row[3].write(f"{r['Diện tích']}m²")
-                
                 sk = f"v_{r['Mã đầy đủ']}"
-                if st.session_state.get(sk): 
-                    row[4].code(r['Số điện thoại'], language="text")
+                if st.session_state.get(sk): row[4].code(r['Số điện thoại'], language="text")
                 elif row[4].button("👁️", key=f"b_{i}"):
                     st.session_state[sk] = True
                     st.rerun()
-                
                 gv = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"i_{i}", label_visibility="collapsed")
                 if row[6].button("💾", key=f"s_{i}"):
                     try:
@@ -214,5 +204,7 @@ else:
                         sh_data.update_cell(cell.row, h_names.index('Ghi chú') + 1, gv)
                         st.toast("Đã lưu!")
                     except: st.error("Lỗi!")
-                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
+            
     except Exception as e: st.error(f"Lỗi: {e}")
