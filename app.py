@@ -45,10 +45,6 @@ st.markdown("""
 
         /* Tiêu đề thu nhỏ một chút cho vừa màn hình dọc */
         .brand-title { font-size: 26px; white-space: normal !important; }
-        
-        /* Chức năng bảng cuộn ngang trên mobile */
-        div[data-testid="stHorizontalBlock"] { overflow-x: auto !important; display: flex !important; flex-wrap: nowrap !important; }
-        div[data-testid="stHorizontalBlock"] > div { min-width: 130px !important; flex-shrink: 0 !important; }
     }
 
     /* Header sau khi đăng nhập */
@@ -82,11 +78,6 @@ def init_connection():
 doc = init_connection()
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
-if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
-
-# Cấu hình danh mục
-LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
-LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
 # --- 2. ĐĂNG NHẬP CÂN ĐỐI ---
 if not st.session_state['logged_in']:
@@ -121,80 +112,3 @@ if not st.session_state['logged_in']:
                 except:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
-
-# --- 3. PHẦN CHỨC NĂNG (NỐI TIẾP VÀO SAU ĐĂNG NHẬP) ---
-else:
-    # Header chào mừng & Đăng xuất
-    st.markdown('<div class="header-right-container">', unsafe_allow_html=True)
-    c_greet, c_logout = st.columns([9, 1]) 
-    with c_greet:
-        st.markdown(f'<div class="user-greet" style="text-align: right; padding-top: 5px;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
-    with c_logout:
-        if st.button("❌", key="logout_btn"):
-            st.session_state.clear()
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    try:
-        sh_data = doc.worksheet("DATA_CAN_HO")
-        raw_vals = sh_data.get_all_values()
-        h_names = raw_vals[0]
-        df_main = pd.DataFrame(raw_vals[1:], columns=h_names).applymap(lambda x: str(x).strip() if x else "")
-
-        tab_ma, tab_tieuchi = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
-
-        with tab_ma:
-            c_in, c_btn, _ = st.columns([2, 0.8, 3])
-            with c_in: m_input = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
-            with c_btn:
-                if st.button("Tìm", key="f_btn"):
-                    if m_input:
-                        st.session_state['res_df'] = df_main[df_main['Mã đầy đủ'].str.contains(m_input.strip(), case=False)]
-                        st.rerun()
-
-        with tab_tieuchi:
-            c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-            with c1: 
-                ds_toa = sorted([t for t in df_main['Tòa'].unique() if t])
-                sel_t = st.multiselect("Tòa", ds_toa)
-            with c2: f_s = st.selectbox("Từ tầng", LIST_TANG_PHYSICAL, index=4)
-            with c3: f_e = st.selectbox("Đến tầng", LIST_TANG_PHYSICAL, index=15)
-            with c4: sel_tr = st.multiselect("Trục", LIST_TRUC)
-            
-            if st.button("🚀 Thực hiện lọc", key="btn_filter"):
-                t_df = df_main.copy()
-                if sel_t: t_df = t_df[t_df['Tòa'].isin(sel_t)]
-                if sel_tr:
-                    t_df['Trục_Clean'] = t_df['Trục'].apply(lambda x: x.replace(".0", "").zfill(2) if x else "")
-                    t_df = t_df[t_df['Trục_Clean'].isin(sel_tr)]
-                idx_s, idx_e = LIST_TANG_PHYSICAL.index(f_s), LIST_TANG_PHYSICAL.index(f_e)
-                t_df = t_df[t_df['Tầng'].isin(LIST_TANG_PHYSICAL[idx_s : idx_e + 1])]
-                st.session_state['res_df'] = t_df
-                st.rerun()
-
-        res = st.session_state['res_df']
-        if not res.empty:
-            st.divider()
-            cols = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
-            for cl, txt in zip(cols, ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]):
-                cl.markdown(f"<div class='header-text'>{txt}</div>", unsafe_allow_html=True)
-            for i, r in res.iterrows():
-                row = st.columns([1.2, 1.2, 0.8, 0.6, 1.5, 2.5, 0.5])
-                row[0].write(f"**{r['Mã đầy đủ']}**")
-                row[1].write(r['Chủ nhà'])
-                row[2].write(r.get('Loại hình', '-'))
-                row[3].write(f"{r['Diện tích']}m²")
-                sk = f"v_{r['Mã đầy đủ']}"
-                if st.session_state.get(sk): row[4].code(r['Số điện thoại'], language="text")
-                elif row[4].button("👁️", key=f"b_{i}"):
-                    st.session_state[sk] = True
-                    st.rerun()
-                gv = row[5].text_input("G", value=r.get('Ghi chú', ''), key=f"i_{i}", label_visibility="collapsed")
-                if row[6].button("💾", key=f"s_{i}"):
-                    try:
-                        cell = sh_data.find(r['Mã đầy đủ'])
-                        sh_data.update_cell(cell.row, h_names.index('Ghi chú') + 1, gv)
-                        st.toast("Đã lưu!")
-                    except: st.error("Lỗi!")
-                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
-    except Exception as e: st.error(f"Lỗi: {e}")
