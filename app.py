@@ -39,7 +39,7 @@ st.markdown("""
         }
         .brand-title { font-size: 26px; white-space: normal !important; }
         
-        /* Cấu hình để bảng dữ liệu dàn hàng ngang trên mobile */
+        /* Cấu hình thêm để bảng dữ liệu bên trong không bị vỡ trên mobile */
         div[data-testid="stHorizontalBlock"] {
             overflow-x: auto !important;
             display: flex !important;
@@ -57,7 +57,7 @@ st.markdown("""
     }
     .user-greet { font-size: 14px; color: #333; white-space: nowrap; }
     
-    /* Nút đỏ đặc trưng của bạn */
+    /* Giữ màu đỏ cho nút đăng nhập và đăng xuất */
     .stButton > button {
         background-color: #ff4b4b !important; color: white !important; border: none !important;
     }
@@ -120,15 +120,15 @@ if not st.session_state['logged_in']:
                     if attempt < 2: time.sleep(1); continue
             if success: st.rerun()
 
-# --- 3. GIAO DIỆN SAU KHI ĐĂNG NHẬP ---
+# --- 3. CHỨC NĂNG SAU KHI ĐĂNG NHẬP ---
 else:
-    # Nút đỏ ngang hàng dòng xin chào
+    # Header: Dòng xin chào và nút Đăng xuất ngang hàng
     st.markdown(f'<div class="header-right-container">', unsafe_allow_html=True)
     c_greet, c_logout = st.columns([8.5, 1.5])
     with c_greet:
         st.markdown(f'<div class="user-greet" style="text-align: right; padding-top: 5px;">Xin chào <b>{st.session_state["user_name"]}!</b></div>', unsafe_allow_html=True)
     with c_logout:
-        if st.button("❌", key="logout_btn", use_container_width=True):
+        if st.button("Đăng xuất", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -142,7 +142,7 @@ else:
         t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
         with t1:
             ci, cb, _ = st.columns([2, 1, 3])
-            with ci: m_in = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Mã...")
+            with ci: m_in = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Nhập mã...")
             with cb:
                 if st.button("Tìm", key="f_b"):
                     if m_in:
@@ -154,7 +154,7 @@ else:
             with c2: fs = st.selectbox("Từ", LIST_TANG_PHYSICAL, index=4)
             with c3: fe = st.selectbox("Đến", LIST_TANG_PHYSICAL, index=15)
             with c4: str_tr = st.multiselect("Trục", LIST_TRUC)
-            if st.button("🚀 Lọc", key="l_b"):
+            if st.button("🚀 Thực hiện lọc", key="l_b"):
                 tdf = df_main.copy()
                 if st_toa: tdf = tdf[tdf['Tòa'].isin(st_toa)]
                 if str_tr:
@@ -168,7 +168,7 @@ else:
         res = st.session_state['res_df']
         if not res.empty:
             st.divider()
-            # Toàn bộ phần này sẽ tự động cuộn ngang nhờ CSS stHorizontalBlock của bạn
+            # Toàn bộ phần cột dữ liệu này sẽ tự động dàn hàng ngang trên Mobile nhờ CSS của bạn
             h_cols = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
             titles = ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]
             for col, title in zip(h_cols, titles):
