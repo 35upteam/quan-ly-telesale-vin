@@ -38,32 +38,29 @@ st.markdown("""
             padding-right: 1rem !important;
         }
         .brand-title { font-size: 26px; white-space: normal !important; }
-        
-        /* CSS CHỈ DÀNH CHO BẢNG DỮ LIỆU (KHÔNG ẢNH HƯỞNG ĐĂNG NHẬP) */
-        .mobile-table {
+
+        /* FIX HIỂN THỊ BẢNG NGANG TRÊN ĐIỆN THOẠI */
+        div[data-testid="stHorizontalBlock"] {
             display: flex !important;
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch;
         }
-        .mobile-table > div {
+        div[data-testid="stHorizontalBlock"] > div {
             min-width: 130px !important;
             flex-shrink: 0 !important;
         }
     }
 
     /* Header sau khi đăng nhập */
-    .header-flex {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: -45px;
-        margin-bottom: 25px;
+    .header-right-container {
+        display: flex; justify-content: flex-end; align-items: center;
+        gap: 8px; margin-top: -45px; margin-bottom: 25px; width: 100%;
     }
     .user-greet { font-size: 14px; color: #333; white-space: nowrap; }
-    .stButton > button[key="logout_btn"] {
+    
+    /* NÚT ĐỎ ĐĂNG NHẬP & ĐĂNG XUẤT (GIỮ MÀU ĐỎ) */
+    .stButton > button {
         background-color: #ff4b4b !important; color: white !important; border: none !important;
-        padding: 0 10px !important; height: 28px !important; border-radius: 4px !important;
     }
     .header-text { font-weight: bold; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; font-size: 13px; }
     .row-divider { border-bottom: 1px solid #ebedef; padding: 10px 0; }
@@ -90,7 +87,7 @@ if 'res_df' not in st.session_state: st.session_state['res_df'] = pd.DataFrame()
 LIST_TANG_PHYSICAL = ["1", "2", "3", "05A", "05", "06", "07", "08", "08A", "09", "10", "11", "12", "12A", "15A", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
 LIST_TRUC = [f"{i:02d}" for i in range(1, 31)]
 
-# --- 2. ĐĂNG NHẬP (GIỮ NGUYÊN BẢN GỐC 100%) ---
+# --- 2. ĐĂNG NHẬP (GIỮ NGUYÊN 100% - NÚT ĐỎ) ---
 if not st.session_state['logged_in']:
     _, mid_col, _ = st.columns([1, 1.5, 1]) 
     with mid_col:
@@ -124,17 +121,14 @@ if not st.session_state['logged_in']:
 
 # --- 3. CHỨC NĂNG SAU ĐĂNG NHẬP ---
 else:
-    # Nút đỏ ngang hàng dòng xin chào
+    # Header: Đưa Xin chào và Nút Đăng xuất lên ngang hàng (Flexbox)
     st.markdown(f"""
-        <div class="header-flex">
-            <div></div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span class="user-greet">Xin chào <b>{st.session_state["user_name"]}!</b></span>
-            </div>
+        <div class="header-right-container">
+            <span class="user-greet">Xin chào <b>{st.session_state["user_name"]}!</b></span>
         </div>
     """, unsafe_allow_html=True)
     
-    # Nút Logout thực tế (vị trí trùng với div trên)
+    # Dùng columns để nút bấm Streamlit hiển thị được logic logout
     _, c_logout = st.columns([8.5, 1.5])
     with c_logout:
         if st.button("Đăng xuất", key="logout_btn"):
@@ -149,8 +143,8 @@ else:
 
         t1, t2 = st.tabs(["🔍 Tìm nhanh", "📊 Lọc chi tiết"])
         with t1:
-            ci, cb, _ = st.columns([2, 1, 3])
-            with ci: m = st.text_input("Mã", label_visibility="collapsed", placeholder="Mã căn...")
+            ci, cb, _ = st.columns([2, 0.8, 3])
+            with ci: m = st.text_input("Mã căn", label_visibility="collapsed", placeholder="Mã...")
             with cb:
                 if st.button("Tìm", key="f_b"):
                     if m:
@@ -176,16 +170,12 @@ else:
         res = st.session_state['res_df']
         if not res.empty:
             st.divider()
-            # Bọc toàn bộ bảng vào div 'mobile-table' để cuộn ngang trên điện thoại
-            st.markdown('<div class="mobile-table">', unsafe_allow_html=True)
-            
-            # Header bảng
+            # Toàn bộ phần này sẽ tự động cuộn ngang trên điện thoại nhờ CSS ở trên
             h_cols = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
             titles = ["Mã Căn", "Chủ Nhà", "Loại", "DT", "SĐT", "Ghi chú", "Lưu"]
             for col, title in zip(h_cols, titles):
                 col.markdown(f"<div class='header-text'>{title}</div>", unsafe_allow_html=True)
             
-            # Dòng dữ liệu
             for i, r in res.iterrows():
                 row = st.columns([1.5, 1.5, 1, 1, 2, 3, 1])
                 row[0].write(f"**{r['Mã đầy đủ']}**")
@@ -204,7 +194,5 @@ else:
                         sh_data.update_cell(cell.row, h_names.index('Ghi chú') + 1, gv)
                         st.toast("Đã lưu!")
                     except: st.error("Lỗi!")
-            st.markdown('</div>', unsafe_allow_html=True)
-            st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
-            
+                st.markdown("<div class='row-divider'></div>", unsafe_allow_html=True)
     except Exception as e: st.error(f"Lỗi: {e}")
